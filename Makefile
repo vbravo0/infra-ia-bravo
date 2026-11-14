@@ -4,14 +4,20 @@ K3D_CLUSTER ?= infra-cloud
 OLLAMA_DIR  ?= /home/vub/.ollama
 
 .DEFAULT_GOAL := help
-.PHONY: help test build-model k3d-up k3d-images deploy rollback status clean
+.PHONY: help test test-unit test-integration build-model k3d-up k3d-images deploy rollback status clean
 
 help: ## lista los comandos
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-18s %s\n", $$1, $$2}'
 
-test: ## corre la suite de pruebas aislada en contenedores efimeros
-	docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from test-runner
-	docker compose -f docker-compose.test.yml down -v
+test-unit: ## corre las pruebas unitarias aisladas en memoria (0.2s)
+	docker compose -f docker-compose.unit.yml up --build --abort-on-container-exit --exit-code-from test-runner
+	docker compose -f docker-compose.unit.yml down -v
+
+test-integration: ## corre las pruebas de integracion reales contra Ollama y Qwen2.5
+	docker compose -f docker-compose.integration.yml up --build --abort-on-container-exit --exit-code-from integration-runner
+	docker compose -f docker-compose.integration.yml down -v
+
+test: test-unit test-integration ## corre ambas suites (unitarias + integracion)
 
 build-model: ## construye la imagen model:$(TAG)
 	docker build --build-arg MODEL_VERSION=$(TAG) -t model:$(TAG) ./model

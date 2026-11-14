@@ -1,0 +1,23 @@
+services:
+  ollama-test:
+    image: ollama/ollama:latest
+    volumes:
+      - ~/.ollama/models:/root/.ollama/models:ro
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 1s
+      timeout: 2s
+      retries: 15
+
+  integration-runner:
+    build:
+      context: ./model
+      dockerfile: Dockerfile.test
+    environment:
+      MODEL_VERSION: test-sha
+      OLLAMA_URL: http://ollama-test:11434/api/chat
+      OLLAMA_MODEL: qwen2.5:1.5b
+    command: ["pytest", "tests/test_integration_llm.py", "-v", "--disable-warnings"]
+    depends_on:
+      ollama-test:
+        condition: service_healthy
