@@ -1,42 +1,57 @@
+"""Servicio de dominio para clasificacion de severidad de CVEs."""
+
 import time
+from typing import Optional
 
 from adapters.metrics import INVALID_OUTPUT, PREDICT_LATENCY, PREDICTIONS
-from adapters.ml_classifier import is_ready, predict_tfidf
-from adapters.ollama_client import predict_llm
-from adapters.prompt_repo import load_prompt
 from adapters.postgres_repo import save_prediction
+from adapters.prompt_repo import load_prompt
 from config import MODEL_VERSION
+from domain.predictor import OllamaPredictor, SeverityPredictor, TfidfPredictor
 from domain.schemas import PredictRequest, PredictResult
+
+# Registro de motores de inferencia desacoplados (inversion de dependencias simple)
+_PREDICTORS: dict[str, SeverityPredictor] = {
+    "tfidf": TfidfPredictor(),
+}
+
+
+def register_predictor(engine: str, predictor: SeverityPredictor) -> None:
+    """Registra o reemplaza un motor de inferencia (util para testing o extension).
+
+    Args:
+        engine: Nombre del motor ('tfidf', 'llm', 'fake', etc).
+        predictor: Objeto que cumple el trait SeverityPredictor.
+    """
+    _PREDICTORS[engine] = predictor
+
+
+def get_predictor(engine: str, prompt_text: str = "") -> SeverityPredictor:
+    """Obtiene el predictor registrado o instancia el default segun el motor."""
+    if engine in _PREDICTORS:
+        return _PREDICTORS[engine]
+    if engine == "llm":
+        return OllamaPredictor(prompt_text=prompt_text)
+    raise ValueError(f"Motor desconocido: {engine}")
 
 
 async def classify_cve(req: PredictRequest) -> PredictResult:
-    """Clasifica la severidad de un CVE usando TF-IDF o LLM segun el motor elegido.
+    """Clasifica la severidad de un CVE usando el motor especificado.
 
     Args:
         req: Objeto PredictRequest con cve_id, description y engine.
 
     Returns:
         Objeto PredictResult con la prediccion, modelo, latencia y persistencia.
-
-    Raises:
-        RuntimeError: Si el modelo clasico o las dependencias no estan inicializadas.
     """
-    if not is_ready():
-        raise RuntimeError("model not loaded yet")
-
     start = time.perf_counter()
     prompt_text, prompt_hash = load_prompt()
-    parse_error = False
-    raw_llm = ""
 
-    if req.engine == "llm":
-        severity, conf, parse_error, raw_llm = await predict_llm(
-            prompt_text, req.description
-        )
-        if parse_error:
-            INVALID_OUTPUT.labels(version=MODEL_VERSION, prompt_hash=prompt_hash).inc()
-    else:
-        severity, conf = predict_tfidf(req.description)
+    predictor = get_predictor(req.engine, prompt_text=prompt_text)
+    severity, conf, parse_error, raw_llm = await predictor.predict(req.description)
+
+    if parse_error:
+        INVALID_OUTPUT.labels(version=MODEL_VERSION, prompt_hash=prompt_hash).inc()
 
     elapsed = time.perf_counter() - start
     res = PredictResult(
