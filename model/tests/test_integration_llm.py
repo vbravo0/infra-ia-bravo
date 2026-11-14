@@ -45,7 +45,7 @@ def test_real_llm_cve_classification(real_llm_client: TestClient):
     res = real_llm_client.post("/predict", json=payload)
     assert res.status_code == 200
     data = res.json()
-    assert data["severity"] in {"HIGH", "CRITICAL"}
+    assert data["severity"] in {"HIGH", "CRITICAL"}, f"Fallo clasificacion: {data}"
     assert data["confidence"] is None
     assert data["parse_error"] is False
 

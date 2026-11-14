@@ -5,3 +5,4 @@ services:
       dockerfile: Dockerfile.test
     environment:
       MODEL_VERSION: test-sha
+    command: ["pytest", "tests/test_api.py", "-v", "--disable-warnings"]
