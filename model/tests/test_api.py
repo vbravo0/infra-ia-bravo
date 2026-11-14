@@ -3,6 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from domain.predictor import FakePredictor
+from domain.repository import FakeCveRepository
 from serve import create_app
 
 
@@ -59,39 +60,56 @@ def test_predict_llm_with_fake():
     assert len(fake_llm.calls) == 1
 
 
-def test_feedback_append_only():
-    """Prueba feedback e IDs incrementales usando una instancia de app con predictor controlado."""
-    # Instancia aislada con tfidf seteado en LOW
+def test_feedback_append_only_with_fake_repo():
+    """Prueba feedback e IDs incrementales usando FakeCveRepository (aislamiento total en memoria)."""
+    fake_repo = FakeCveRepository()
     fake_tfidf = FakePredictor(severity="LOW", confidence=0.88)
-    custom_app = create_app(predictors={"tfidf": fake_tfidf})
+    custom_app = create_app(predictors={"tfidf": fake_tfidf}, repo=fake_repo)
     test_client = TestClient(custom_app)
 
     pred_res = test_client.post(
         "/predict",
         json={
-            "cve_id": "CVE-TEST-002",
+            "cve_id": "CVE-TEST-ISOLATED",
             "description": "SQL injection in auth header",
             "engine": "tfidf",
         },
     )
     assert pred_res.status_code == 200
     assert pred_res.json()["severity"] == "LOW"
+    # Verificar que el repositorio en memoria recibio el registro
+    assert len(fake_repo.history) == 1
+    assert fake_repo.history[0]["cve_id"] == "CVE-TEST-ISOLATED"
 
     # Enviar primer feedback humano discrepante (CRITICAL vs LOW original)
     fb1 = test_client.post(
-        "/feedback", json={"cve_id": "CVE-TEST-002", "actual_severity": "CRITICAL"}
+        "/feedback", json={"cve_id": "CVE-TEST-ISOLATED", "actual_severity": "CRITICAL"}
     )
     assert fb1.status_code == 200
     id1 = fb1.json()["feedback_id"]
+    assert id1 == 1
 
     # Enviar segundo feedback corregido (debe dar nuevo ID, no UPDATE)
     fb2 = test_client.post(
-        "/feedback", json={"cve_id": "CVE-TEST-002", "actual_severity": "HIGH"}
+        "/feedback", json={"cve_id": "CVE-TEST-ISOLATED", "actual_severity": "HIGH"}
     )
     assert fb2.status_code == 200
     id2 = fb2.json()["feedback_id"]
+    assert id2 == 2
 
     assert id2 > id1, "El feedback debe ser append-only con IDs incrementales"
+    assert len(fake_repo.feedbacks) == 2
+
+
+def test_history_empty_isolation():
+    """Verifica que un repo fake nuevo nazca 100% vacio sin contaminacion de otros tests."""
+    fresh_repo = FakeCveRepository()
+    fresh_app = create_app(repo=fresh_repo)
+    fresh_client = TestClient(fresh_app)
+
+    res = fresh_client.get("/history")
+    assert res.status_code == 200
+    assert res.json() == []  # Cero datos de tests anteriores
 
 
 def test_feedback_invalid_class(client: TestClient):

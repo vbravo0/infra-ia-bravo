@@ -4,13 +4,9 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from adapters.ml_classifier import is_ready
 from adapters.prompt_repo import load_prompt
-from adapters.postgres_repo import (
-    list_history,
-    append_feedback,
-    get_predictions_for_cve,
-)
 from adapters.metrics import FEEDBACK_TOTAL, FEEDBACK_DISCREPANCY
 from config import MODEL_VERSION, PROMPT_PATH, TEMPLATE_PATH, VALID_CLASSES
+from domain.repository import CveRepository
 from domain.schemas import PredictRequest, FeedbackRequest, FeedbackResult
 from domain.service import classify_cve
 
@@ -56,20 +52,22 @@ async def predict(req: PredictRequest, request: Request):
     """Clasifica una vulnerabilidad usando el motor solicitado (tfidf o llm)."""
     try:
         predictors = request.app.state.predictors
-        return await classify_cve(req, predictors)
+        repo: CveRepository = request.app.state.repo
+        return await classify_cve(req, predictors, repo)
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(503, str(exc)) from exc
 
 
 @router.get("/history")
-def history():
+def history(request: Request):
     """Retorna las ultimas inferencias registradas en la base de datos."""
-    return list_history()
+    repo: CveRepository = request.app.state.repo
+    return repo.list_history()
 
 
-def _record_discrepancy_metrics(cve_id: str, actual: str) -> None:
+def _record_discrepancy_metrics(cve_id: str, actual: str, repo: CveRepository) -> None:
     """Contrasta la severidad real con predicciones previas y actualiza metricas Prometheus."""
-    predictions = get_predictions_for_cve(cve_id)
+    predictions = repo.get_predictions_for_cve(cve_id)
     FEEDBACK_TOTAL.labels(actual_severity=actual).inc()
     for row in predictions:
         pred_sev = row.get("severity", "UNKNOWN")
@@ -81,7 +79,7 @@ def _record_discrepancy_metrics(cve_id: str, actual: str) -> None:
 
 
 @router.post("/feedback", response_model=FeedbackResult)
-def feedback(req: FeedbackRequest):
+def feedback(req: FeedbackRequest, request: Request):
     """Registra la severidad real (de NVD o del analista) de forma inmutable (append-only)."""
     actual = req.actual_severity.strip().upper()
     if actual not in VALID_CLASSES:
@@ -90,13 +88,14 @@ def feedback(req: FeedbackRequest):
             f"actual_severity invalida: {req.actual_severity}. Clases validas: {VALID_CLASSES}",
         )
 
-    feedback_id = append_feedback(
+    repo: CveRepository = request.app.state.repo
+    feedback_id = repo.append_feedback(
         cve_id=req.cve_id,
         actual_severity=actual,
         source=req.source,
         notes=req.notes,
     )
-    _record_discrepancy_metrics(req.cve_id, actual)
+    _record_discrepancy_metrics(req.cve_id, actual, repo)
 
     return FeedbackResult(
         status="ok",

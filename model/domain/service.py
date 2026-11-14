@@ -3,11 +3,8 @@
 import time
 from typing import Mapping
 
-from adapters.metrics import INVALID_OUTPUT, PREDICT_LATENCY, PREDICTIONS
-from adapters.postgres_repo import save_prediction
-from adapters.prompt_repo import load_prompt
-from config import MODEL_VERSION
 from domain.predictor import OllamaPredictor, SeverityPredictor, TfidfPredictor
+from domain.repository import CveRepository
 from domain.schemas import PredictRequest, PredictResult
 
 
@@ -21,13 +18,16 @@ def default_predictors() -> dict[str, SeverityPredictor]:
 
 
 async def classify_cve(
-    req: PredictRequest, predictors: Mapping[str, SeverityPredictor]
+    req: PredictRequest,
+    predictors: Mapping[str, SeverityPredictor],
+    repo: CveRepository,
 ) -> PredictResult:
-    """Clasifica la severidad de un CVE usando el motor provisto (sin estado global).
+    """Clasifica la severidad de un CVE usando el motor provisto y persiste via CveRepository.
 
     Args:
         req: Objeto PredictRequest con cve_id, description y engine.
         predictors: Mapeo inmutable de motores registrados.
+        repo: Implementacion del trait CveRepository para persistencia.
 
     Returns:
         Objeto PredictResult con la prediccion, modelo, latencia y persistencia.
@@ -64,5 +64,5 @@ async def classify_cve(
         prompt_hash=prompt_hash,
     ).inc()
     PREDICT_LATENCY.labels(engine=req.engine).observe(elapsed)
-    save_prediction(res, req.description)
+    repo.save_prediction(res, req.description)
     return res
