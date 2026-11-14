@@ -41,15 +41,16 @@ def list_history(limit: int = 15) -> list[dict[str, Any]]:
             return cur.fetchall()
 
 
-def update_feedback(cve_id: str, actual_severity: str) -> int:
-    with get_connection() as conn:
+def update_feedback(cve_id: str, actual_severity: str) -> list[dict[str, Any]]:
+    with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 UPDATE history
                 SET actual_severity = %s
                 WHERE cve_id = %s
+                RETURNING id, cve_id, engine, severity, actual_severity
                 """,
                 (actual_severity, cve_id),
             )
-            return cur.rowcount
+            return cur.fetchall()

@@ -13,3 +13,13 @@ INVALID_OUTPUT = Counter(
 PREDICT_LATENCY = Histogram(
     "cve_predict_seconds", "Latencia de prediccion en segundos", ["engine"]
 )
+FEEDBACK_TOTAL = Counter(
+    "cve_feedback_total",
+    "Feedbacks de severidad real recibidos",
+    ["actual_severity"],
+)
+FEEDBACK_DISCREPANCY = Counter(
+    "cve_feedback_discrepancy_total",
+    "Discrepancia entre la prediccion original y la severidad real",
+    ["engine", "pred_severity", "actual_severity"],
+)

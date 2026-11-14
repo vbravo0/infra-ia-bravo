@@ -4,9 +4,10 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from adapters.ml_classifier import is_ready
 from adapters.prompt_repo import load_prompt
-from adapters.postgres_repo import list_history
-from config import MODEL_VERSION, PROMPT_PATH, TEMPLATE_PATH
-from domain.schemas import PredictRequest
+from adapters.postgres_repo import list_history, update_feedback
+from adapters.metrics import FEEDBACK_TOTAL, FEEDBACK_DISCREPANCY
+from config import MODEL_VERSION, PROMPT_PATH, TEMPLATE_PATH, VALID_CLASSES
+from domain.schemas import PredictRequest, FeedbackRequest, FeedbackResult
 from domain.service import classify_cve
 
 router = APIRouter()
@@ -54,3 +55,33 @@ async def predict(req: PredictRequest):
 @router.get("/history")
 def history():
     return list_history()
+
+
+@router.post("/feedback", response_model=FeedbackResult)
+def feedback(req: FeedbackRequest):
+    actual = req.actual_severity.strip().upper()
+    if actual not in VALID_CLASSES:
+        raise HTTPException(
+            400,
+            f"actual_severity invalida: {req.actual_severity}. Clases validas: {VALID_CLASSES}",
+        )
+
+    updated_rows = update_feedback(req.cve_id, actual)
+    if not updated_rows:
+        raise HTTPException(404, f"No se encontro prediccion previa para {req.cve_id}")
+
+    FEEDBACK_TOTAL.labels(actual_severity=actual).inc()
+    for row in updated_rows:
+        pred_sev = row.get("severity", "UNKNOWN")
+        engine = row.get("engine", "unknown")
+        if pred_sev != actual:
+            FEEDBACK_DISCREPANCY.labels(
+                engine=engine, pred_severity=pred_sev, actual_severity=actual
+            ).inc()
+
+    return FeedbackResult(
+        status="ok",
+        cve_id=req.cve_id,
+        actual_severity=actual,
+        rows_updated=len(updated_rows),
+    )

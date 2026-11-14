@@ -19,3 +19,15 @@ class PredictResult(BaseModel):
     latency_ms: float
     parse_error: bool = False
     raw_llm: str = ""
+
+
+class FeedbackRequest(BaseModel):
+    cve_id: str
+    actual_severity: str
+
+
+class FeedbackResult(BaseModel):
+    status: str
+    cve_id: str
+    actual_severity: str
+    rows_updated: int
