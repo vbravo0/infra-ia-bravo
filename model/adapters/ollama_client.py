@@ -1,5 +1,5 @@
 import json
-from typing import Optional
+from typing import Any, Optional
 import httpx
 from config import OLLAMA_MODEL, OLLAMA_URL, VALID_CLASSES
 

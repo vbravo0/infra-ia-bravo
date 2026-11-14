@@ -1,6 +1,6 @@
 """Definicion del Trait de inferencia (Protocol) e implementaciones desacopladas."""
 
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
 from adapters.ml_classifier import is_ready, predict_tfidf
 from adapters.ollama_client import predict_llm
 
