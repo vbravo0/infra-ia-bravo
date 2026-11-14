@@ -1,0 +1,42 @@
+name: CI/CD Pipeline - Eval & Deploy
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  evaluate-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: 2. Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 3. Instalar dependencias
+        run: |
+          pip install -r model/requirements.txt
+
+      - name: 4. Entrenar / Preparar artefacto (Build Time)
+        run: |
+          cd model && python train.py
+
+      - name: 5. Quality Gate (Eval Automatizada que frena el deploy)
+        run: |
+          # Si este script da error (exit 1), el pipeline SE FRENA ACA
+          python evaluate.py
+
+      - name: 6. Construir Imagen Docker (Solo si paso el paso 5)
+        run: |
+          TAG=$(git rev-parse --short HEAD)
+          echo "Construyendo imagen con tag: $TAG"
+          docker build --build-arg MODEL_VERSION=$TAG -t gcr.io/mi-proyecto/cve-model:$TAG ./model
+
+      # - name: 7. Desplegar en GKE (Ejemplo en la nube)
+      #   run: |
+      #     helm upgrade --install model ./helm/charts/model --set image.tag=$TAG

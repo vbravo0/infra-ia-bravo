@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><title>CVE Model Server ({{MODEL_VERSION}})</title>
+<style>
+  body { background:#111; color:#eee; font-family:monospace; max-width:920px; margin:1.5rem auto; padding:0 1rem; }
+  .box { background:#1c1c1c; border:1px solid #333; padding:1rem; border-radius:6px; margin-bottom:1rem; }
+  input, textarea, select { width:100%; background:#262626; color:#fff; border:1px solid #444; padding:0.5rem; margin-top:0.3rem; }
+  button { background:#2563eb; color:#fff; border:none; padding:0.6rem 1.2rem; border-radius:4px; cursor:pointer; font-weight:bold; margin-top:0.6rem; }
+  .tag { background:#3b0764; color:#e9d5ff; padding:0.2rem 0.5rem; border-radius:4px; }
+  table { width:100%; border-collapse:collapse; margin-top:0.8rem; font-size:0.85rem; }
+  th, td { border:1px solid #333; padding:0.4rem; text-align:left; }
+  .CRITICAL { color:#ff4d4f; font-weight:bold; }
+  .HIGH { color:#ffa940; font-weight:bold; }
+  .MEDIUM { color:#fadb14; font-weight:bold; }
+  .LOW { color:#73d13d; font-weight:bold; }
+  .UNKNOWN { color:#c084fc; font-weight:bold; }
+</style>
+</head>
+<body>
+  <h2>CVE-TriageAI — Pod en k3s</h2>
+  <div class="box">
+    <div><strong>MODEL_VERSION:</strong> <span class="tag">{{MODEL_VERSION}}</span> |
+         <strong>PROMPT_HASH (SHA-256):</strong> <span class="tag">{{PROMPT_HASH}}</span></div>
+    <p><strong>Prompt empaquetado en esta imagen (<code>prompts/system_prompt.txt</code>):</strong></p>
+    <pre style="background:#0a0a0a; padding:0.7rem; border:1px solid #333; white-space:pre-wrap;">{{PROMPT_TEXT}}</pre>
+  </div>
+  <div class="box">
+    <label>Motor:</label>
+    <select id="engine">
+      <option value="tfidf">Modelo Propio Entrenado (TF-IDF + LogisticRegression ~2ms)</option>
+      <option value="llm">LLM en Ollama (qwen2.5:1.5b usando el prompt de arriba)</option>
+    </select>
+    <label style="display:block; margin-top:0.5rem;">CVE ID:</label>
+    <input id="cve_id" value="CVE-2024-39300"/>
+    <label style="display:block; margin-top:0.5rem;">Descripción:</label>
+    <textarea id="desc" rows="3">Missing authentication vulnerability exists in Telnet function of WAB-I1750-PS. A remote attacker may login without authentication and alter settings.</textarea>
+    <button onclick="predecir()">Enviar a POST /predict</button>
+    <pre id="res" style="background:#0a0a0a; padding:0.7rem; margin-top:0.7rem; display:none;"></pre>
+  </div>
+  <div class="box">
+    <h3>Historial de Peticiones en este Pod</h3>
+    <div id="tabla"></div>
+  </div>
+<script>
+async function cargar() {
+  const r = await fetch('/history');
+  const rows = await r.json();
+  let h = '<table><tr><th>ID</th><th>CVE</th><th>Motor</th><th>Severidad</th><th>Conf</th><th>Versión</th><th>Prompt Hash</th><th>Latencia</th></tr>';
+  for (const x of rows) {
+    h += `<tr><td>${x.id}</td><td>${x.cve_id}</td><td>${x.engine}</td><td class="${x.severity}">${x.severity}</td><td>${x.confidence}</td><td><code>${x.model_version}</code></td><td><code>${x.prompt_hash}</code></td><td>${x.latency_ms} ms</td></tr>`;
+  }
+  document.getElementById('tabla').innerHTML = h + '</table>';
+}
+async function predecir() {
+  const r = await fetch('/predict', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      cve_id: document.getElementById('cve_id').value,
+      description: document.getElementById('desc').value,
+      engine: document.getElementById('engine').value
+    })
+  });
+  const d = await r.json();
+  const el = document.getElementById('res');
+  el.style.display = 'block'; el.innerText = JSON.stringify(d, null, 2);
+  cargar();
+}
+cargar();
+</script>
+</body></html>

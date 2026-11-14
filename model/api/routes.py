@@ -1,0 +1,56 @@
+from fastapi import APIRouter, HTTPException, Response
+from fastapi.responses import HTMLResponse
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
+from adapters.ml_classifier import is_ready
+from adapters.prompt_repo import load_prompt
+from adapters.postgres_repo import list_history
+from config import MODEL_VERSION, PROMPT_PATH, TEMPLATE_PATH
+from domain.schemas import PredictRequest
+from domain.service import classify_cve
+
+router = APIRouter()
+
+
+@router.get("/", response_class=HTMLResponse)
+def ui() -> str:
+    prompt_text, prompt_hash = load_prompt()
+    html = TEMPLATE_PATH.read_text(encoding="utf-8")
+    return (
+        html.replace("{{MODEL_VERSION}}", MODEL_VERSION)
+        .replace("{{PROMPT_HASH}}", prompt_hash)
+        .replace("{{PROMPT_TEXT}}", prompt_text)
+    )
+
+
+@router.get("/healthz")
+def healthz() -> Response:
+    if not is_ready() or not PROMPT_PATH.exists():
+        return Response(
+            content='{"status":"loading"}',
+            status_code=503,
+            media_type="application/json",
+        )
+    _, prompt_hash = load_prompt()
+    return Response(
+        content=f'{{"status":"ok","model_version":"{MODEL_VERSION}","prompt_hash":"{prompt_hash}"}}',
+        media_type="application/json",
+    )
+
+
+@router.get("/metrics")
+def metrics() -> Response:
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+@router.post("/predict")
+async def predict(req: PredictRequest):
+    try:
+        return await classify_cve(req)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+
+@router.get("/history")
+def history():
+    return list_history()
