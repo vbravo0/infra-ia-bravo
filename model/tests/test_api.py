@@ -1,6 +1,6 @@
 """Tests de integracion y contrato de la API en ambiente aislado."""
 
-import pytest
+import pytest  # type: ignore
 from fastapi.testclient import TestClient
 from domain.predictor import FakePredictor
 from domain.repository import FakeCveRepository
@@ -9,8 +9,8 @@ from serve import create_app
 
 @pytest.fixture
 def client():
-    """Application Factory fixture: entrega una instancia limpia de la app por test."""
-    app = create_app()
+    """Application Factory fixture: entrega una instancia limpia con FakeCveRepository."""
+    app = create_app(repo=FakeCveRepository())
     return TestClient(app)
 
 
@@ -43,8 +43,8 @@ def test_predict_llm_with_fake():
     fake_llm = FakePredictor(
         severity="CRITICAL", confidence=None, raw_output='{"severity":"CRITICAL"}'
     )
-    # Instancia de app aislada con sus propios predictores
-    custom_app = create_app(predictors={"llm": fake_llm})
+    # Instancia de app aislada con sus propios predictores y su propio FakeCveRepository
+    custom_app = create_app(predictors={"llm": fake_llm}, repo=FakeCveRepository())
     test_client = TestClient(custom_app)
 
     payload = {
