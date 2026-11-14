@@ -1,14 +1,20 @@
 """Tests de integracion y contrato de la API en ambiente aislado."""
 
+import pytest
 from fastapi.testclient import TestClient
 from domain.predictor import FakePredictor, TfidfPredictor
 from domain.service import register_predictor
-from serve import app
-
-client = TestClient(app)
+from serve import create_app
 
 
-def test_healthz():
+@pytest.fixture
+def client():
+    """Application Factory fixture: entrega una instancia limpia de la app por test."""
+    app = create_app()
+    return TestClient(app)
+
+
+def test_healthz(client: TestClient):
     """Verifica que el probe de salud responda 200 con version y hash de prompt."""
     res = client.get("/healthz")
     assert res.status_code == 200
@@ -17,7 +23,7 @@ def test_healthz():
     assert "prompt_hash" in data
 
 
-def test_predict_tfidf():
+def test_predict_tfidf(client: TestClient):
     """Prueba prediccion con modelo supervisado: debe incluir confidence float y model_hash."""
     payload = {
         "cve_id": "CVE-TEST-001",
@@ -32,7 +38,7 @@ def test_predict_tfidf():
     assert data["model_hash"] == "test-sha"
 
 
-def test_predict_llm_with_fake():
+def test_predict_llm_with_fake(client: TestClient):
     """Prueba contrato de prediccion LLM inyectando FakePredictor sin requerir GPU ni Ollama."""
     fake_llm = FakePredictor(
         severity="CRITICAL", confidence=None, raw_output='{"severity":"CRITICAL"}'
@@ -52,7 +58,7 @@ def test_predict_llm_with_fake():
     assert len(fake_llm.calls) == 1
 
 
-def test_feedback_append_only():
+def test_feedback_append_only(client: TestClient):
     """Prueba que el feedback registre eventos nuevos e IDs incrementales con prediccion controlada."""
     # 1. Reemplazar temporalmente la implementacion de 'tfidf' por un Fake que devuelva LOW
     fake_engine = FakePredictor(severity="LOW", confidence=0.88)
@@ -90,7 +96,7 @@ def test_feedback_append_only():
         register_predictor("tfidf", TfidfPredictor())
 
 
-def test_feedback_invalid_class():
+def test_feedback_invalid_class(client: TestClient):
     """Verifica que rechace severidades invalidas con HTTP 400."""
     res = client.post(
         "/feedback", json={"cve_id": "CVE-TEST-003", "actual_severity": "SUPER_GRAVE"}

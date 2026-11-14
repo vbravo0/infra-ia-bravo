@@ -11,8 +11,15 @@ from config import MODEL_VERSION, PORT
 # el proceso falla inmediatamente (fail-fast) sin abrir el puerto.
 load_model()
 
-app = FastAPI(title="cve-model-server", version=MODEL_VERSION)
-app.include_router(router)
+
+def create_app() -> FastAPI:
+    """Application factory: crea y configura la instancia de FastAPI."""
+    app = FastAPI(title="cve-model-server", version=MODEL_VERSION)
+    app.include_router(router)
+    return app
+
+
+app = create_app()
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=PORT)
