@@ -66,6 +66,19 @@ def history():
     return list_history()
 
 
+def _record_discrepancy_metrics(cve_id: str, actual: str) -> None:
+    """Contrasta la severidad real con predicciones previas y actualiza metricas Prometheus."""
+    predictions = get_predictions_for_cve(cve_id)
+    FEEDBACK_TOTAL.labels(actual_severity=actual).inc()
+    for row in predictions:
+        pred_sev = row.get("severity", "UNKNOWN")
+        engine = row.get("engine", "unknown")
+        if pred_sev != actual:
+            FEEDBACK_DISCREPANCY.labels(
+                engine=engine, pred_severity=pred_sev, actual_severity=actual
+            ).inc()
+
+
 @router.post("/feedback", response_model=FeedbackResult)
 def feedback(req: FeedbackRequest):
     """Registra la severidad real (de NVD o del analista) de forma inmutable (append-only)."""
@@ -76,24 +89,13 @@ def feedback(req: FeedbackRequest):
             f"actual_severity invalida: {req.actual_severity}. Clases validas: {VALID_CLASSES}",
         )
 
-    # 1. Registrar el evento append-only en la tabla feedback_events
     feedback_id = append_feedback(
         cve_id=req.cve_id,
         actual_severity=actual,
         source=req.source,
         notes=req.notes,
     )
-
-    # 2. Contrastar contra las predicciones previas para alertar sobre discrepancias
-    predictions = get_predictions_for_cve(req.cve_id)
-    FEEDBACK_TOTAL.labels(actual_severity=actual).inc()
-    for row in predictions:
-        pred_sev = row.get("severity", "UNKNOWN")
-        engine = row.get("engine", "unknown")
-        if pred_sev != actual:
-            FEEDBACK_DISCREPANCY.labels(
-                engine=engine, pred_severity=pred_sev, actual_severity=actual
-            ).inc()
+    _record_discrepancy_metrics(req.cve_id, actual)
 
     return FeedbackResult(
         status="ok",
