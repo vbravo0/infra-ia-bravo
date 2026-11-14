@@ -1,6 +1,6 @@
-from typing import Any
-import psycopg
-from psycopg.rows import dict_row
+from typing import Any, Optional
+import psycopg  # type: ignore
+from psycopg.rows import dict_row  # type: ignore
 from config import DATABASE_URL
 from domain.schemas import PredictResult
 
@@ -56,25 +56,53 @@ def list_history(limit: int = 15) -> list[dict[str, Any]]:
             return cur.fetchall()
 
 
-def update_feedback(cve_id: str, actual_severity: str) -> list[dict[str, Any]]:
-    """Registra la severidad real o correccion humana para un cve_id existente.
-
-    Args:
-        cve_id: Identificador del CVE a conciliar.
-        actual_severity: Etiqueta confirmada (LOW, MEDIUM, HIGH, CRITICAL).
-
-    Returns:
-        Lista de filas actualizadas con prediccion original y nueva severidad.
-    """
+def get_predictions_for_cve(cve_id: str) -> list[dict[str, Any]]:
+    """Obtiene las predicciones emitidas para un cve_id para contrastar discrepancias."""
     with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
         with conn.cursor() as cur:
             cur.execute(
+                "SELECT id, cve_id, engine, severity FROM history WHERE cve_id = %s",
+                (cve_id,),
+            )
+            return cur.fetchall()
+
+
+def append_feedback(
+    cve_id: str,
+    actual_severity: str,
+    source: str = "human",
+    notes: Optional[str] = None,
+) -> int:
+    """Registra un evento de feedback append-only con timestamp.
+
+    Args:
+        cve_id: Identificador del CVE.
+        actual_severity: Severidad real o corregida (LOW, MEDIUM, HIGH, CRITICAL).
+        source: Origen del feedback ('human' o 'nvd').
+        notes: Comentario u observacion opcional del analista.
+
+    Returns:
+        ID autonumerico del nuevo registro de feedback.
+    """
+    with psycopg.connect(DATABASE_URL) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
                 """
-                UPDATE history
-                SET actual_severity = %s
-                WHERE cve_id = %s
-                RETURNING id, cve_id, engine, severity, actual_severity
+                INSERT INTO feedback_events (cve_id, actual_severity, source, notes)
+                VALUES (%s, %s, %s, %s)
+                RETURNING id
                 """,
-                (actual_severity, cve_id),
+                (cve_id, actual_severity, source, notes),
+            )
+            row = cur.fetchone()
+            return row[0] if row else 0
+
+
+def list_feedbacks(limit: int = 15) -> list[dict[str, Any]]:
+    """Consulta los ultimos eventos de feedback en orden cronologico inverso."""
+    with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM feedback_events ORDER BY id DESC LIMIT %s", (limit,)
             )
             return cur.fetchall()

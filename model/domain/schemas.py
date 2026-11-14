@@ -24,10 +24,13 @@ class PredictResult(BaseModel):
 class FeedbackRequest(BaseModel):
     cve_id: str
     actual_severity: str
+    source: str = "human"
+    notes: Optional[str] = None
 
 
 class FeedbackResult(BaseModel):
     status: str
+    feedback_id: int
     cve_id: str
     actual_severity: str
-    rows_updated: int
+    source: str

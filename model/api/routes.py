@@ -4,7 +4,11 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from adapters.ml_classifier import is_ready
 from adapters.prompt_repo import load_prompt
-from adapters.postgres_repo import list_history, update_feedback
+from adapters.postgres_repo import (
+    list_history,
+    append_feedback,
+    get_predictions_for_cve,
+)
 from adapters.metrics import FEEDBACK_TOTAL, FEEDBACK_DISCREPANCY
 from config import MODEL_VERSION, PROMPT_PATH, TEMPLATE_PATH, VALID_CLASSES
 from domain.schemas import PredictRequest, FeedbackRequest, FeedbackResult
@@ -64,7 +68,7 @@ def history():
 
 @router.post("/feedback", response_model=FeedbackResult)
 def feedback(req: FeedbackRequest):
-    """Recibe la severidad real (de NVD o del analista) y actualiza el registro."""
+    """Registra la severidad real (de NVD o del analista) de forma inmutable (append-only)."""
     actual = req.actual_severity.strip().upper()
     if actual not in VALID_CLASSES:
         raise HTTPException(
@@ -72,12 +76,18 @@ def feedback(req: FeedbackRequest):
             f"actual_severity invalida: {req.actual_severity}. Clases validas: {VALID_CLASSES}",
         )
 
-    updated_rows = update_feedback(req.cve_id, actual)
-    if not updated_rows:
-        raise HTTPException(404, f"No se encontro prediccion previa para {req.cve_id}")
+    # 1. Registrar el evento append-only en la tabla feedback_events
+    feedback_id = append_feedback(
+        cve_id=req.cve_id,
+        actual_severity=actual,
+        source=req.source,
+        notes=req.notes,
+    )
 
+    # 2. Contrastar contra las predicciones previas para alertar sobre discrepancias
+    predictions = get_predictions_for_cve(req.cve_id)
     FEEDBACK_TOTAL.labels(actual_severity=actual).inc()
-    for row in updated_rows:
+    for row in predictions:
         pred_sev = row.get("severity", "UNKNOWN")
         engine = row.get("engine", "unknown")
         if pred_sev != actual:
@@ -87,7 +97,8 @@ def feedback(req: FeedbackRequest):
 
     return FeedbackResult(
         status="ok",
+        feedback_id=feedback_id,
         cve_id=req.cve_id,
         actual_severity=actual,
-        rows_updated=len(updated_rows),
+        source=req.source,
     )
