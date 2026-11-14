@@ -1,7 +1,7 @@
 """Tests de integracion y contrato de la API en ambiente aislado."""
 
 from fastapi.testclient import TestClient
-from domain.predictor import FakePredictor
+from domain.predictor import FakePredictor, TfidfPredictor
 from domain.service import register_predictor
 from serve import app
 
@@ -54,36 +54,40 @@ def test_predict_llm_with_fake():
 
 def test_feedback_append_only():
     """Prueba que el feedback registre eventos nuevos e IDs incrementales con prediccion controlada."""
-    # 1. Inyectar predictor fake para controlar la severidad original exactamente en LOW
+    # 1. Reemplazar temporalmente la implementacion de 'tfidf' por un Fake que devuelva LOW
     fake_engine = FakePredictor(severity="LOW", confidence=0.88)
-    register_predictor("fake_engine", fake_engine)
+    register_predictor("tfidf", fake_engine)
 
-    pred_res = client.post(
-        "/predict",
-        json={
-            "cve_id": "CVE-TEST-002",
-            "description": "SQL injection in auth header",
-            "engine": "fake_engine",
-        },
-    )
-    assert pred_res.status_code == 200
-    assert pred_res.json()["severity"] == "LOW"
+    try:
+        pred_res = client.post(
+            "/predict",
+            json={
+                "cve_id": "CVE-TEST-002",
+                "description": "SQL injection in auth header",
+                "engine": "tfidf",
+            },
+        )
+        assert pred_res.status_code == 200
+        assert pred_res.json()["severity"] == "LOW"
 
-    # 2. Enviar primer feedback humano discrepante (CRITICAL vs LOW original)
-    fb1 = client.post(
-        "/feedback", json={"cve_id": "CVE-TEST-002", "actual_severity": "CRITICAL"}
-    )
-    assert fb1.status_code == 200
-    id1 = fb1.json()["feedback_id"]
+        # 2. Enviar primer feedback humano discrepante (CRITICAL vs LOW original)
+        fb1 = client.post(
+            "/feedback", json={"cve_id": "CVE-TEST-002", "actual_severity": "CRITICAL"}
+        )
+        assert fb1.status_code == 200
+        id1 = fb1.json()["feedback_id"]
 
-    # 3. Enviar segundo feedback corregido (debe dar nuevo ID, no UPDATE)
-    fb2 = client.post(
-        "/feedback", json={"cve_id": "CVE-TEST-002", "actual_severity": "HIGH"}
-    )
-    assert fb2.status_code == 200
-    id2 = fb2.json()["feedback_id"]
+        # 3. Enviar segundo feedback corregido (debe dar nuevo ID, no UPDATE)
+        fb2 = client.post(
+            "/feedback", json={"cve_id": "CVE-TEST-002", "actual_severity": "HIGH"}
+        )
+        assert fb2.status_code == 200
+        id2 = fb2.json()["feedback_id"]
 
-    assert id2 > id1, "El feedback debe ser append-only con IDs incrementales"
+        assert id2 > id1, "El feedback debe ser append-only con IDs incrementales"
+    finally:
+        # Restaurar el predictor real de tfidf
+        register_predictor("tfidf", TfidfPredictor())
 
 
 def test_feedback_invalid_class():
