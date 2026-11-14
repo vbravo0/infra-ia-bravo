@@ -36,19 +36,29 @@ def _parse_output(raw: str) -> tuple[str, Optional[float], bool]:
     return "UNKNOWN", None, True
 
 
+DEFAULT_OPTIONS: dict[str, Any] = {
+    "temperature": 0.0,
+    "num_predict": 10,
+}
+
+
 async def predict_llm(
-    system_prompt: str, description: str
+    system_prompt: str,
+    description: str,
+    options: Optional[dict[str, Any]] = None,
 ) -> tuple[str, Optional[float], bool, str]:
     """Ejecuta inferencia asincrona contra el LLM en Ollama.
 
     Args:
         system_prompt: Prompt del sistema cargado desde disco.
         description: Descripcion del CVE.
+        options: Parametros de generacion (temperature, seed, num_gpu, etc).
 
     Returns:
         Tupla (severidad, confianza, parse_error, raw_text).
     """
     messages = _build_messages(system_prompt, description)
+    llm_options = DEFAULT_OPTIONS if options is None else options
     try:
         async with httpx.AsyncClient(timeout=90.0) as client:
             resp = await client.post(
@@ -58,13 +68,7 @@ async def predict_llm(
                     "messages": messages,
                     "stream": False,
                     "think": False,
-                    "options": {
-                        "temperature": 0.0,
-                        "seed": 42,
-                        "top_k": 1,
-                        "num_predict": 10,
-                        "num_gpu": 0,  # Fuerza inferencia exclusivamente en CPU para determinismo estricto
-                    },
+                    "options": llm_options,
                 },
             )
             resp.raise_for_status()

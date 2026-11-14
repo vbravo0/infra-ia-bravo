@@ -31,11 +31,16 @@ class TfidfPredictor:
 class OllamaPredictor:
     """Implementacion del trait consumiendo el LLM via API REST estructurada."""
 
-    def __init__(self, prompt_text: str):
+    def __init__(
+        self,
+        prompt_text: str,
+        options: Optional[dict[str, Any]] = None,
+    ):
         self.prompt_text = prompt_text
+        self.options = options
 
     async def predict(self, description: str) -> tuple[str, Optional[float], bool, str]:
-        return await predict_llm(self.prompt_text, description)
+        return await predict_llm(self.prompt_text, description, options=self.options)
 
 
 class FakePredictor:
