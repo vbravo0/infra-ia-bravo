@@ -24,8 +24,6 @@ class TfidfPredictor:
     """Implementacion del trait usando clasificador supervisado en memoria (scikit-learn)."""
 
     async def predict(self, description: str) -> tuple[str, Optional[float], bool, str]:
-        if not is_ready():
-            raise RuntimeError("model not loaded yet")
         severity, conf = predict_tfidf(description)
         return severity, conf, False, ""
 
