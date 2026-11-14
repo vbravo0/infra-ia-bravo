@@ -15,6 +15,7 @@ router = APIRouter()
 
 @router.get("/", response_class=HTMLResponse)
 def ui() -> str:
+    """Renderiza la interfaz web minima de prueba del pod."""
     prompt_text, prompt_hash = load_prompt()
     html = TEMPLATE_PATH.read_text(encoding="utf-8")
     return (
@@ -26,6 +27,7 @@ def ui() -> str:
 
 @router.get("/healthz")
 def healthz() -> Response:
+    """Probe de readiness/liveness para Kubernetes."""
     if not is_ready() or not PROMPT_PATH.exists():
         return Response(
             content='{"status":"loading"}',
@@ -41,11 +43,13 @@ def healthz() -> Response:
 
 @router.get("/metrics")
 def metrics() -> Response:
+    """Endpoint de scraping para Prometheus."""
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @router.post("/predict")
 async def predict(req: PredictRequest):
+    """Clasifica una vulnerabilidad usando el motor solicitado (tfidf o llm)."""
     try:
         return await classify_cve(req)
     except RuntimeError as exc:
@@ -54,11 +58,13 @@ async def predict(req: PredictRequest):
 
 @router.get("/history")
 def history():
+    """Retorna las ultimas inferencias registradas en la base de datos."""
     return list_history()
 
 
 @router.post("/feedback", response_model=FeedbackResult)
 def feedback(req: FeedbackRequest):
+    """Recibe la severidad real (de NVD o del analista) y actualiza el registro."""
     actual = req.actual_severity.strip().upper()
     if actual not in VALID_CLASSES:
         raise HTTPException(

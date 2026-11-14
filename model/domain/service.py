@@ -10,6 +10,17 @@ from domain.schemas import PredictRequest, PredictResult
 
 
 async def classify_cve(req: PredictRequest) -> PredictResult:
+    """Clasifica la severidad de un CVE usando TF-IDF o LLM segun el motor elegido.
+
+    Args:
+        req: Objeto PredictRequest con cve_id, description y engine.
+
+    Returns:
+        Objeto PredictResult con la prediccion, modelo, latencia y persistencia.
+
+    Raises:
+        RuntimeError: Si el modelo clasico o las dependencias no estan inicializadas.
+    """
     if not is_ready():
         raise RuntimeError("model not loaded yet")
 

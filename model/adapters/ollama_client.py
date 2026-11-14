@@ -5,6 +5,15 @@ from config import OLLAMA_MODEL, OLLAMA_URL, VALID_CLASSES
 
 
 def _build_messages(system_prompt: str, description: str) -> list[dict[str, str]]:
+    """Construye los mensajes para la API /api/chat encapsulando la entrada en JSON.
+
+    Args:
+        system_prompt: Instrucciones base del modelo y analista.
+        description: Texto libre de la vulnerabilidad a clasificar.
+
+    Returns:
+        Lista de diccionarios con roles 'system' y 'user'.
+    """
     user_payload = json.dumps({"description": description}, ensure_ascii=False)
     system_text = (
         f"{system_prompt}\n\n"
@@ -20,7 +29,14 @@ def _build_messages(system_prompt: str, description: str) -> list[dict[str, str]
 
 
 def _parse_output(raw: str) -> tuple[str, Optional[float], bool]:
-    # Validación estricta: si la respuesta no es exactamente una de las 4 clases, falla como UNKNOWN.
+    """Valida que la salida del LLM pertenezca estrictamente a las 4 clases CVSS.
+
+    Args:
+        raw: Texto crudo devuelto por el modelo.
+
+    Returns:
+        Tupla (severidad, confianza, parse_error). Para LLM la confianza es None.
+    """
     token = raw.strip().upper()
     if token in VALID_CLASSES:
         return token, None, False
@@ -30,6 +46,15 @@ def _parse_output(raw: str) -> tuple[str, Optional[float], bool]:
 async def predict_llm(
     system_prompt: str, description: str
 ) -> tuple[str, Optional[float], bool, str]:
+    """Ejecuta inferencia asincrona contra el LLM en Ollama.
+
+    Args:
+        system_prompt: Prompt del sistema cargado desde disco.
+        description: Descripcion del CVE.
+
+    Returns:
+        Tupla (severidad, confianza, parse_error, raw_text).
+    """
     messages = _build_messages(system_prompt, description)
     try:
         async with httpx.AsyncClient(timeout=90.0) as client:
