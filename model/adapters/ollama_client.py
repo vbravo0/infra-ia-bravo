@@ -60,7 +60,10 @@ async def predict_llm(
                     "think": False,
                     "options": {
                         "temperature": 0.0,
+                        "seed": 42,
+                        "top_k": 1,
                         "num_predict": 10,
+                        "num_gpu": 0,  # Fuerza inferencia exclusivamente en CPU para determinismo estricto
                     },
                 },
             )
