@@ -14,7 +14,7 @@ test-unit: ## corre las pruebas unitarias aisladas en memoria (0.2s)
 	docker compose -f docker-compose.unit.yml down -v
 
 test-integration: ## corre las pruebas de integracion reales contra Ollama y Qwen2.5
-	docker compose -f docker-compose.integration.yml up --build --abort-on-container-exit --exit-code-from integration-runner
+	docker compose -f docker-compose.integration.yml up --build --attach integration-runner --abort-on-container-exit --exit-code-from integration-runner
 	docker compose -f docker-compose.integration.yml down -v
 
 test: test-unit test-integration ## corre ambas suites (unitarias + integracion)
