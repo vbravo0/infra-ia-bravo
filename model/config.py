@@ -14,6 +14,6 @@ DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql://cve_user:cve_pass@postgres:5432/cve_db"
 )
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://host.k3d.internal:11434/api/generate")
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://host.k3d.internal:11434/api/chat")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:1.5b")
 VALID_CLASSES = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
