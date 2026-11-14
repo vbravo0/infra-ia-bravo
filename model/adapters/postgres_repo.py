@@ -57,11 +57,16 @@ def list_history(limit: int = 15) -> list[dict[str, Any]]:
 
 
 def get_predictions_for_cve(cve_id: str) -> list[dict[str, Any]]:
-    """Obtiene las predicciones emitidas para un cve_id para contrastar discrepancias."""
+    """Obtiene la ultima prediccion por motor emitida para un cve_id para contrastar discrepancias."""
     with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, cve_id, engine, severity FROM history WHERE cve_id = %s",
+                """
+                SELECT DISTINCT ON (engine) id, cve_id, engine, severity, created_at
+                FROM history
+                WHERE cve_id = %s
+                ORDER BY engine, id DESC
+                """,
                 (cve_id,),
             )
             return cur.fetchall()
