@@ -1,7 +1,7 @@
 """Servicio de dominio para clasificacion de severidad de CVEs."""
 
 import time
-from typing import Optional
+from typing import Mapping
 
 from adapters.metrics import INVALID_OUTPUT, PREDICT_LATENCY, PREDICTIONS
 from adapters.postgres_repo import save_prediction
@@ -10,44 +10,35 @@ from config import MODEL_VERSION
 from domain.predictor import OllamaPredictor, SeverityPredictor, TfidfPredictor
 from domain.schemas import PredictRequest, PredictResult
 
-# Registro de motores de inferencia desacoplados (inversion de dependencias simple)
-_PREDICTORS: dict[str, SeverityPredictor] = {
-    "tfidf": TfidfPredictor(),
-}
+
+def default_predictors() -> dict[str, SeverityPredictor]:
+    """Crea el conjunto de predictores estandar de produccion."""
+    prompt_text, _ = load_prompt()
+    return {
+        "tfidf": TfidfPredictor(),
+        "llm": OllamaPredictor(prompt_text=prompt_text),
+    }
 
 
-def register_predictor(engine: str, predictor: SeverityPredictor) -> None:
-    """Registra o reemplaza un motor de inferencia (util para testing o extension).
-
-    Args:
-        engine: Nombre del motor ('tfidf', 'llm', 'fake', etc).
-        predictor: Objeto que cumple el trait SeverityPredictor.
-    """
-    _PREDICTORS[engine] = predictor
-
-
-def get_predictor(engine: str, prompt_text: str = "") -> SeverityPredictor:
-    """Obtiene el predictor registrado o instancia el default segun el motor."""
-    if engine in _PREDICTORS:
-        return _PREDICTORS[engine]
-    if engine == "llm":
-        return OllamaPredictor(prompt_text=prompt_text)
-    raise ValueError(f"Motor desconocido: {engine}")
-
-
-async def classify_cve(req: PredictRequest) -> PredictResult:
-    """Clasifica la severidad de un CVE usando el motor especificado.
+async def classify_cve(
+    req: PredictRequest, predictors: Mapping[str, SeverityPredictor]
+) -> PredictResult:
+    """Clasifica la severidad de un CVE usando el motor provisto (sin estado global).
 
     Args:
         req: Objeto PredictRequest con cve_id, description y engine.
+        predictors: Mapeo inmutable de motores registrados.
 
     Returns:
         Objeto PredictResult con la prediccion, modelo, latencia y persistencia.
     """
-    start = time.perf_counter()
-    prompt_text, prompt_hash = load_prompt()
+    if req.engine not in predictors:
+        raise ValueError(f"Motor no configurado: {req.engine}")
 
-    predictor = get_predictor(req.engine, prompt_text=prompt_text)
+    start = time.perf_counter()
+    _, prompt_hash = load_prompt()
+
+    predictor = predictors[req.engine]
     severity, conf, parse_error, raw_llm = await predictor.predict(req.description)
 
     if parse_error:

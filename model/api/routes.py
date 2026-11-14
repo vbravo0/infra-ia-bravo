@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
@@ -52,11 +52,12 @@ def metrics() -> Response:
 
 
 @router.post("/predict")
-async def predict(req: PredictRequest):
+async def predict(req: PredictRequest, request: Request):
     """Clasifica una vulnerabilidad usando el motor solicitado (tfidf o llm)."""
     try:
-        return await classify_cve(req)
-    except RuntimeError as exc:
+        predictors = request.app.state.predictors
+        return await classify_cve(req, predictors)
+    except (RuntimeError, ValueError) as exc:
         raise HTTPException(503, str(exc)) from exc
 
 

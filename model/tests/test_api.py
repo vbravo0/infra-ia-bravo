@@ -2,8 +2,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from domain.predictor import FakePredictor, TfidfPredictor
-from domain.service import register_predictor
+from domain.predictor import FakePredictor
 from serve import create_app
 
 
@@ -38,19 +37,21 @@ def test_predict_tfidf(client: TestClient):
     assert data["model_hash"] == "test-sha"
 
 
-def test_predict_llm_with_fake(client: TestClient):
-    """Prueba contrato de prediccion LLM inyectando FakePredictor sin requerir GPU ni Ollama."""
+def test_predict_llm_with_fake():
+    """Prueba prediccion LLM inyectando FakePredictor en una instancia nueva de la app."""
     fake_llm = FakePredictor(
         severity="CRITICAL", confidence=None, raw_output='{"severity":"CRITICAL"}'
     )
-    register_predictor("llm", fake_llm)
+    # Instancia de app aislada con sus propios predictores
+    custom_app = create_app(predictors={"llm": fake_llm})
+    test_client = TestClient(custom_app)
 
     payload = {
         "cve_id": "CVE-TEST-LLM",
         "description": "Remote code execution via deserialization",
         "engine": "llm",
     }
-    res = client.post("/predict", json=payload)
+    res = test_client.post("/predict", json=payload)
     assert res.status_code == 200
     data = res.json()
     assert data["severity"] == "CRITICAL"
@@ -58,42 +59,39 @@ def test_predict_llm_with_fake(client: TestClient):
     assert len(fake_llm.calls) == 1
 
 
-def test_feedback_append_only(client: TestClient):
-    """Prueba que el feedback registre eventos nuevos e IDs incrementales con prediccion controlada."""
-    # 1. Reemplazar temporalmente la implementacion de 'tfidf' por un Fake que devuelva LOW
-    fake_engine = FakePredictor(severity="LOW", confidence=0.88)
-    register_predictor("tfidf", fake_engine)
+def test_feedback_append_only():
+    """Prueba feedback e IDs incrementales usando una instancia de app con predictor controlado."""
+    # Instancia aislada con tfidf seteado en LOW
+    fake_tfidf = FakePredictor(severity="LOW", confidence=0.88)
+    custom_app = create_app(predictors={"tfidf": fake_tfidf})
+    test_client = TestClient(custom_app)
 
-    try:
-        pred_res = client.post(
-            "/predict",
-            json={
-                "cve_id": "CVE-TEST-002",
-                "description": "SQL injection in auth header",
-                "engine": "tfidf",
-            },
-        )
-        assert pred_res.status_code == 200
-        assert pred_res.json()["severity"] == "LOW"
+    pred_res = test_client.post(
+        "/predict",
+        json={
+            "cve_id": "CVE-TEST-002",
+            "description": "SQL injection in auth header",
+            "engine": "tfidf",
+        },
+    )
+    assert pred_res.status_code == 200
+    assert pred_res.json()["severity"] == "LOW"
 
-        # 2. Enviar primer feedback humano discrepante (CRITICAL vs LOW original)
-        fb1 = client.post(
-            "/feedback", json={"cve_id": "CVE-TEST-002", "actual_severity": "CRITICAL"}
-        )
-        assert fb1.status_code == 200
-        id1 = fb1.json()["feedback_id"]
+    # Enviar primer feedback humano discrepante (CRITICAL vs LOW original)
+    fb1 = test_client.post(
+        "/feedback", json={"cve_id": "CVE-TEST-002", "actual_severity": "CRITICAL"}
+    )
+    assert fb1.status_code == 200
+    id1 = fb1.json()["feedback_id"]
 
-        # 3. Enviar segundo feedback corregido (debe dar nuevo ID, no UPDATE)
-        fb2 = client.post(
-            "/feedback", json={"cve_id": "CVE-TEST-002", "actual_severity": "HIGH"}
-        )
-        assert fb2.status_code == 200
-        id2 = fb2.json()["feedback_id"]
+    # Enviar segundo feedback corregido (debe dar nuevo ID, no UPDATE)
+    fb2 = test_client.post(
+        "/feedback", json={"cve_id": "CVE-TEST-002", "actual_severity": "HIGH"}
+    )
+    assert fb2.status_code == 200
+    id2 = fb2.json()["feedback_id"]
 
-        assert id2 > id1, "El feedback debe ser append-only con IDs incrementales"
-    finally:
-        # Restaurar el predictor real de tfidf
-        register_predictor("tfidf", TfidfPredictor())
+    assert id2 > id1, "El feedback debe ser append-only con IDs incrementales"
 
 
 def test_feedback_invalid_class(client: TestClient):
