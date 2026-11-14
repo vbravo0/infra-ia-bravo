@@ -3,6 +3,9 @@
 import time
 from typing import Mapping
 
+from adapters.metrics import INVALID_OUTPUT, PREDICT_LATENCY, PREDICTIONS
+from adapters.prompt_repo import load_prompt
+from config import MODEL_VERSION
 from domain.predictor import OllamaPredictor, SeverityPredictor, TfidfPredictor
 from domain.repository import CveRepository
 from domain.schemas import PredictRequest, PredictResult
