@@ -1,7 +1,7 @@
 """Tests de integracion reales contra el pod o contenedor de Ollama."""
 
 import os
-import pytest
+import pytest  # type: ignore
 from fastapi.testclient import TestClient
 from domain.predictor import OllamaPredictor
 from domain.repository import FakeCveRepository
