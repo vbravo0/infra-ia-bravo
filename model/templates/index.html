@@ -55,11 +55,11 @@ async function cargar() {
 async function predecir() {
   const r = await fetch('/predict', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
+    body: JSON.stringify([{
       cve_id: document.getElementById('cve_id').value,
       description: document.getElementById('desc').value,
       engine: document.getElementById('engine').value
-    })
+    }])
   });
   const d = await r.json();
   const el = document.getElementById('res');

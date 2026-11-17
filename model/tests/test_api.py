@@ -27,17 +27,21 @@ def test_healthz(client: TestClient):
 
 def test_predict_tfidf(client: TestClient):
     """Prueba prediccion con modelo supervisado: debe incluir confidence float y model_hash."""
-    payload = {
-        "cve_id": "CVE-TEST-001",
-        "description": "Buffer overflow in network daemon allows remote root execution",
-        "engine": "tfidf",
-    }
+    payload = [
+        {
+            "cve_id": "CVE-TEST-001",
+            "description": "Buffer overflow in network daemon allows remote root execution",
+            "engine": "tfidf",
+        }
+    ]
     res = client.post("/predict", json=payload)
     assert res.status_code == 200
     data = res.json()
-    assert data["severity"] in {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
-    assert isinstance(data["confidence"], float)
-    assert data["model_hash"] == "test-sha"
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["severity"] in {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
+    assert isinstance(data[0]["confidence"], float)
+    assert data[0]["model_hash"] == "test-sha"
 
 
 def test_predict_batch_list_success(client: TestClient):
@@ -84,14 +88,16 @@ def test_low_confidence_metric_increments_for_uncertain_predictions():
 
     res = client.post(
         "/predict",
-        json={
-            "cve_id": "CVE-UNCERTAIN-001",
-            "description": "Vague description with low certainty",
-            "engine": "tfidf",
-        },
+        json=[
+            {
+                "cve_id": "CVE-UNCERTAIN-001",
+                "description": "Vague description with low certainty",
+                "engine": "tfidf",
+            }
+        ],
     )
     assert res.status_code == 200
-    assert res.json()["confidence"] == 0.35
+    assert res.json()[0]["confidence"] == 0.35
 
     metrics_res = client.get("/metrics")
     assert metrics_res.status_code == 200
@@ -107,16 +113,18 @@ def test_predict_llm_with_fake():
     custom_app = create_app(predictors={"llm": fake_llm}, repo=FakeCveRepository())
     test_client = TestClient(custom_app)
 
-    payload = {
-        "cve_id": "CVE-TEST-LLM",
-        "description": "Remote code execution via deserialization",
-        "engine": "llm",
-    }
+    payload = [
+        {
+            "cve_id": "CVE-TEST-LLM",
+            "description": "Remote code execution via deserialization",
+            "engine": "llm",
+        }
+    ]
     res = test_client.post("/predict", json=payload)
     assert res.status_code == 200
     data = res.json()
-    assert data["severity"] == "CRITICAL"
-    assert data["confidence"] is None
+    assert data[0]["severity"] == "CRITICAL"
+    assert data[0]["confidence"] is None
     assert len(fake_llm.calls) == 1
 
 
@@ -129,14 +137,16 @@ def test_feedback_append_only_with_fake_repo():
 
     pred_res = test_client.post(
         "/predict",
-        json={
-            "cve_id": "CVE-TEST-ISOLATED",
-            "description": "SQL injection in auth header",
-            "engine": "tfidf",
-        },
+        json=[
+            {
+                "cve_id": "CVE-TEST-ISOLATED",
+                "description": "SQL injection in auth header",
+                "engine": "tfidf",
+            }
+        ],
     )
     assert pred_res.status_code == 200
-    assert pred_res.json()["severity"] == "LOW"
+    assert pred_res.json()[0]["severity"] == "LOW"
     # Verificar que el repositorio en memoria recibio el registro
     assert len(fake_repo.history) == 1
     assert fake_repo.history[0]["cve_id"] == "CVE-TEST-ISOLATED"
@@ -171,11 +181,13 @@ def test_feedback_discrepancy_records_prometheus_metrics():
     # 1. Inferencia inicial (predice LOW)
     client.post(
         "/predict",
-        json={
-            "cve_id": "CVE-DISC-001",
-            "description": "SQL injection",
-            "engine": "tfidf",
-        },
+        json=[
+            {
+                "cve_id": "CVE-DISC-001",
+                "description": "SQL injection",
+                "engine": "tfidf",
+            }
+        ],
     )
 
     # 2. Feedback discrepante humano (CRITICAL)
@@ -245,17 +257,19 @@ def test_predict_records_parse_error_in_repo():
 
     res = test_client.post(
         "/predict",
-        json={
-            "cve_id": "CVE-PARSE-ERR-001",
-            "description": "Arbitrary vulnerability text",
-            "engine": "llm",
-        },
+        json=[
+            {
+                "cve_id": "CVE-PARSE-ERR-001",
+                "description": "Arbitrary vulnerability text",
+                "engine": "llm",
+            }
+        ],
     )
     assert res.status_code == 200
     data = res.json()
-    assert data["severity"] == "UNKNOWN"
-    assert data["parse_error"] is True
-    assert data["raw_llm"] == "HACKED_SYSTEM_OVERRIDE"
+    assert data[0]["severity"] == "UNKNOWN"
+    assert data[0]["parse_error"] is True
+    assert data[0]["raw_llm"] == "HACKED_SYSTEM_OVERRIDE"
     assert len(fake_repo.history) == 1
     assert fake_repo.history[0]["parse_error"] == 1
     assert fake_repo.history[0]["severity"] == "UNKNOWN"
@@ -274,11 +288,13 @@ def test_invalid_llm_output_increments_prometheus_metrics():
 
     res = client.post(
         "/predict",
-        json={
-            "cve_id": "CVE-METRIC-001",
-            "description": "Buffer overflow",
-            "engine": "llm",
-        },
+        json=[
+            {
+                "cve_id": "CVE-METRIC-001",
+                "description": "Buffer overflow",
+                "engine": "llm",
+            }
+        ],
     )
     assert res.status_code == 200
 

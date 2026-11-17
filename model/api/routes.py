@@ -1,4 +1,3 @@
-from typing import Union
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -8,7 +7,12 @@ from adapters.prompt_repo import load_prompt
 from adapters.metrics import FEEDBACK_TOTAL, FEEDBACK_DISCREPANCY
 from config import MODEL_VERSION, PROMPT_PATH, TEMPLATE_PATH, VALID_CLASSES
 from domain.repository import CveRepository
-from domain.schemas import PredictRequest, FeedbackRequest, FeedbackResult
+from domain.schemas import (
+    PredictRequest,
+    PredictResult,
+    FeedbackRequest,
+    FeedbackResult,
+)
 from domain.service import classify_cve
 
 router = APIRouter()
@@ -48,42 +52,36 @@ def metrics() -> Response:
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-@router.post("/predict")
-async def predict(
-    payload: Union[PredictRequest, list[PredictRequest]], request: Request
-):
-    """Clasifica vulnerabilidades (acepta un unico CVE o lista de hasta 50).
+@router.post("/predict", response_model=list[PredictResult])
+async def predict(payload: list[PredictRequest], request: Request):
+    """Clasifica una lista de vulnerabilidades (de 0 hasta 50 CVEs).
 
-    - Si recibe un unico objeto PredictRequest: devuelve un PredictResult.
-    - Si recibe una lista []: devuelve [] (si esta vacia) o list[PredictResult] (hasta 50).
-    - Si la lista excede 50 items: rechaza con HTTP 400.
+    - Input: siempre list[PredictRequest] ([{"cve_id": ...}, ...]).
+    - Output: siempre list[PredictResult].
+    - Si la lista esta vacia ([]): devuelve [].
+    - Si la lista tiene entre 1 y 50 CVEs: devuelve la lista con sus N predicciones.
+    - Si la lista tiene mas de 50 CVEs: rechaza con HTTP 400.
     """
+    if len(payload) > 50:
+        raise HTTPException(
+            400,
+            f"Excede el limite maximo de 50 CVEs por request (recibidos: {len(payload)})",
+        )
+    if len(payload) == 0:
+        return []
+
     predictors = request.app.state.predictors
     repo: CveRepository = request.app.state.repo
+    results: list[PredictResult] = []
 
-    if isinstance(payload, list):
-        if len(payload) > 50:
-            raise HTTPException(
-                400,
-                f"Excede el limite maximo de 50 CVEs por request (recibidos: {len(payload)})",
-            )
-        if len(payload) == 0:
-            return []
+    for item in payload:
+        try:
+            res = await classify_cve(item, predictors, repo)
+            results.append(res)
+        except (RuntimeError, ValueError) as exc:
+            raise HTTPException(503, str(exc)) from exc
 
-        results: list[PredictResult] = []
-        for item in payload:
-            try:
-                res = await classify_cve(item, predictors, repo)
-                results.append(res)
-            except (RuntimeError, ValueError) as exc:
-                raise HTTPException(503, str(exc)) from exc
-        return results
-
-    # Caso de un unico objeto PredictRequest
-    try:
-        return await classify_cve(payload, predictors, repo)
-    except (RuntimeError, ValueError) as exc:
-        raise HTTPException(503, str(exc)) from exc
+    return results
 
 
 @router.get("/history")
