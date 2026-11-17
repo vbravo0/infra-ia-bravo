@@ -17,7 +17,7 @@ services:
       MODEL_VERSION: test-sha
       OLLAMA_URL: http://ollama-test:11434/api/chat
       OLLAMA_MODEL: qwen2.5:1.5b
-    command: ["pytest", "tests/test_integration_llm.py", "-v", "--disable-warnings"]
+    command: ["pytest", "tests/integration", "-v", "--disable-warnings"]
     depends_on:
       ollama-test:
         condition: service_healthy
