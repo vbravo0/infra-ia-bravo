@@ -169,3 +169,10 @@ def test_predict_records_parse_error_in_repo():
     assert len(fake_repo.history) == 1
     assert fake_repo.history[0]["parse_error"] == 1
     assert fake_repo.history[0]["severity"] == "UNKNOWN"
+
+    # Verificacion en /metrics: la metrica cve_invalid_output_total debe incrementarse
+    metrics_res = test_client.get("/metrics")
+    assert metrics_res.status_code == 200
+    metrics_text = metrics_res.text
+    assert "cve_invalid_output_total" in metrics_text
+    assert 'cve_invalid_output_total{prompt_hash="' in metrics_text
