@@ -1,19 +1,11 @@
 """Tests unitarios de ops: /healthz, /metrics, /feedback, /history y parseo/mensajes LLM."""
 
 import json
-import pytest  # type: ignore
 from fastapi.testclient import TestClient
 from adapters.ollama_client import _build_messages, _parse_output
 from domain.predictor import FakePredictor
 from domain.repository import FakeCveRepository
 from serve import create_app
-
-
-@pytest.fixture
-def client():
-    """Application Factory fixture: entrega una instancia limpia con FakeCveRepository."""
-    app = create_app(repo=FakeCveRepository())
-    return TestClient(app)
 
 
 def test_healthz(client: TestClient):

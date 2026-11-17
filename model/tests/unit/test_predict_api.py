@@ -1,17 +1,9 @@
 """Tests unitarios del endpoint POST /predict (clasificacion individual, batch y validaciones)."""
 
-import pytest  # type: ignore
 from fastapi.testclient import TestClient
 from domain.predictor import FakePredictor
 from domain.repository import FakeCveRepository
 from serve import create_app
-
-
-@pytest.fixture
-def client():
-    """Application Factory fixture: entrega una instancia limpia con FakeCveRepository."""
-    app = create_app(repo=FakeCveRepository())
-    return TestClient(app)
 
 
 def test_predict_tfidf(client: TestClient):
