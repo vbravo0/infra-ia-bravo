@@ -40,6 +40,28 @@ def test_predict_tfidf(client: TestClient):
     assert data["model_hash"] == "test-sha"
 
 
+def test_low_confidence_metric_increments_for_uncertain_predictions():
+    """Verifica que una prediccion con confianza < 0.50 incremente cve_low_confidence_total."""
+    low_conf_tfidf = FakePredictor(severity="MEDIUM", confidence=0.35)
+    app = create_app(predictors={"tfidf": low_conf_tfidf}, repo=FakeCveRepository())
+    client = TestClient(app)
+
+    res = client.post(
+        "/predict",
+        json={
+            "cve_id": "CVE-UNCERTAIN-001",
+            "description": "Vague description with low certainty",
+            "engine": "tfidf",
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["confidence"] == 0.35
+
+    metrics_res = client.get("/metrics")
+    assert metrics_res.status_code == 200
+    assert 'cve_low_confidence_total{engine="tfidf"' in metrics_res.text
+
+
 def test_predict_llm_with_fake():
     """Prueba prediccion LLM inyectando FakePredictor en una instancia nueva de la app."""
     fake_llm = FakePredictor(

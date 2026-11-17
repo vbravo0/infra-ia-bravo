@@ -23,3 +23,8 @@ FEEDBACK_DISCREPANCY = Counter(
     "Discrepancia entre la prediccion original y la severidad real",
     ["engine", "pred_severity", "actual_severity"],
 )
+LOW_CONFIDENCE = Counter(
+    "cve_low_confidence_total",
+    "Predicciones con score de confianza inferior al umbral",
+    ["engine", "version"],
+)

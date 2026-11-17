@@ -3,7 +3,12 @@
 import time
 from typing import Mapping
 
-from adapters.metrics import INVALID_OUTPUT, PREDICT_LATENCY, PREDICTIONS
+from adapters.metrics import (
+    INVALID_OUTPUT,
+    LOW_CONFIDENCE,
+    PREDICT_LATENCY,
+    PREDICTIONS,
+)
 from adapters.prompt_repo import load_prompt
 from config import MODEL_VERSION
 from domain.predictor import OllamaPredictor, SeverityPredictor, TfidfPredictor
@@ -46,6 +51,9 @@ async def classify_cve(
 
     if parse_error:
         INVALID_OUTPUT.labels(version=MODEL_VERSION, prompt_hash=prompt_hash).inc()
+
+    if conf is not None and conf < 0.50:
+        LOW_CONFIDENCE.labels(engine=req.engine, version=MODEL_VERSION).inc()
 
     elapsed = time.perf_counter() - start
     res = PredictResult(
