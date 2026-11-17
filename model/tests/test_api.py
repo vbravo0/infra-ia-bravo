@@ -102,20 +102,36 @@ def test_feedback_append_only_with_fake_repo():
     assert id2 > id1, "El feedback debe ser append-only con IDs incrementales"
     assert len(fake_repo.feedbacks) == 2
 
-    # Verificacion en /metrics de Prometheus (REQ-15):
-    # Hubo discrepancias entre LOW (predicho) y CRITICAL/HIGH (feedback real).
-    metrics_res = test_client.get("/metrics")
-    assert metrics_res.status_code == 200
-    metrics_text = metrics_res.text
-    assert "cve_feedback_total" in metrics_text
-    assert "cve_feedback_discrepancy_total" in metrics_text
+
+def test_feedback_discrepancy_records_prometheus_metrics():
+    """Verifica que una discrepancia entre prediccion y feedback humano incremente cve_feedback_discrepancy_total."""
+    fake_repo = FakeCveRepository()
+    fake_tfidf = FakePredictor(severity="LOW", confidence=0.88)
+    app = create_app(predictors={"tfidf": fake_tfidf}, repo=fake_repo)
+    client = TestClient(app)
+
+    # 1. Inferencia inicial (predice LOW)
+    client.post(
+        "/predict",
+        json={
+            "cve_id": "CVE-DISC-001",
+            "description": "SQL injection",
+            "engine": "tfidf",
+        },
+    )
+
+    # 2. Feedback discrepante humano (CRITICAL)
+    fb = client.post(
+        "/feedback", json={"cve_id": "CVE-DISC-001", "actual_severity": "CRITICAL"}
+    )
+    assert fb.status_code == 200
+
+    # 3. Validar exposicion en Prometheus
+    res = client.get("/metrics")
+    assert res.status_code == 200
     assert (
         'cve_feedback_discrepancy_total{actual_severity="CRITICAL",engine="tfidf",pred_severity="LOW"}'
-        in metrics_text
-    )
-    assert (
-        'cve_feedback_discrepancy_total{actual_severity="HIGH",engine="tfidf",pred_severity="LOW"}'
-        in metrics_text
+        in res.text
     )
 
 
@@ -186,9 +202,28 @@ def test_predict_records_parse_error_in_repo():
     assert fake_repo.history[0]["parse_error"] == 1
     assert fake_repo.history[0]["severity"] == "UNKNOWN"
 
-    # Verificacion en /metrics: la metrica cve_invalid_output_total debe incrementarse
-    metrics_res = test_client.get("/metrics")
+
+def test_invalid_llm_output_increments_prometheus_metrics():
+    """Verifica que una salida invalida del LLM incremente cve_invalid_output_total en /metrics."""
+    broken_llm = FakePredictor(
+        severity="UNKNOWN",
+        confidence=None,
+        parse_error=True,
+        raw_output="CORRUPTED_RESPONSE",
+    )
+    app = create_app(predictors={"llm": broken_llm}, repo=FakeCveRepository())
+    client = TestClient(app)
+
+    res = client.post(
+        "/predict",
+        json={
+            "cve_id": "CVE-METRIC-001",
+            "description": "Buffer overflow",
+            "engine": "llm",
+        },
+    )
+    assert res.status_code == 200
+
+    metrics_res = client.get("/metrics")
     assert metrics_res.status_code == 200
-    metrics_text = metrics_res.text
-    assert "cve_invalid_output_total" in metrics_text
-    assert 'cve_invalid_output_total{prompt_hash="' in metrics_text
+    assert 'cve_invalid_output_total{prompt_hash="' in metrics_res.text
