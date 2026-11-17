@@ -14,10 +14,20 @@ MODEL_PATH = "model.joblib"
 DATA_PATH = "sample_500.csv"
 
 
+def clean_cve_dataset(df: pd.DataFrame) -> pd.DataFrame:
+    """Limpia el DataFrame de entrenamiento segun los criterios de calidad:
+
+    - Descarta filas con nulos en 'DESCRIPTION' o 'SEVERITY' (dropna).
+    - Descarta registros con descripciones duplicadas (drop_duplicates).
+    """
+    cleaned = df.dropna(subset=["DESCRIPTION", "SEVERITY"])
+    cleaned = cleaned.drop_duplicates(subset=["DESCRIPTION"])
+    return cleaned
+
+
 def main() -> None:
     df = pd.read_csv(DATA_PATH)
-    df = df.dropna(subset=["DESCRIPTION", "SEVERITY"])
-    df = df.drop_duplicates(subset=["DESCRIPTION"])
+    df = clean_cve_dataset(df)
 
     pipeline = Pipeline(
         [
