@@ -102,6 +102,22 @@ def test_feedback_append_only_with_fake_repo():
     assert id2 > id1, "El feedback debe ser append-only con IDs incrementales"
     assert len(fake_repo.feedbacks) == 2
 
+    # Verificacion en /metrics de Prometheus (REQ-15):
+    # Hubo discrepancias entre LOW (predicho) y CRITICAL/HIGH (feedback real).
+    metrics_res = test_client.get("/metrics")
+    assert metrics_res.status_code == 200
+    metrics_text = metrics_res.text
+    assert "cve_feedback_total" in metrics_text
+    assert "cve_feedback_discrepancy_total" in metrics_text
+    assert (
+        'cve_feedback_discrepancy_total{actual_severity="CRITICAL",engine="tfidf",pred_severity="LOW"}'
+        in metrics_text
+    )
+    assert (
+        'cve_feedback_discrepancy_total{actual_severity="HIGH",engine="tfidf",pred_severity="LOW"}'
+        in metrics_text
+    )
+
 
 def test_history_empty_isolation():
     """Verifica que un repo fake nuevo nazca 100% vacio sin contaminacion de otros tests."""
