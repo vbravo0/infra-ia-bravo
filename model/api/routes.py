@@ -1,3 +1,4 @@
+from typing import Union
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -48,12 +49,39 @@ def metrics() -> Response:
 
 
 @router.post("/predict")
-async def predict(req: PredictRequest, request: Request):
-    """Clasifica una vulnerabilidad usando el motor solicitado (tfidf o llm)."""
+async def predict(
+    payload: Union[PredictRequest, list[PredictRequest]], request: Request
+):
+    """Clasifica vulnerabilidades (acepta un unico CVE o lista de hasta 50).
+
+    - Si recibe un unico objeto PredictRequest: devuelve un PredictResult.
+    - Si recibe una lista []: devuelve [] (si esta vacia) o list[PredictResult] (hasta 50).
+    - Si la lista excede 50 items: rechaza con HTTP 400.
+    """
+    predictors = request.app.state.predictors
+    repo: CveRepository = request.app.state.repo
+
+    if isinstance(payload, list):
+        if len(payload) > 50:
+            raise HTTPException(
+                400,
+                f"Excede el limite maximo de 50 CVEs por request (recibidos: {len(payload)})",
+            )
+        if len(payload) == 0:
+            return []
+
+        results: list[PredictResult] = []
+        for item in payload:
+            try:
+                res = await classify_cve(item, predictors, repo)
+                results.append(res)
+            except (RuntimeError, ValueError) as exc:
+                raise HTTPException(503, str(exc)) from exc
+        return results
+
+    # Caso de un unico objeto PredictRequest
     try:
-        predictors = request.app.state.predictors
-        repo: CveRepository = request.app.state.repo
-        return await classify_cve(req, predictors, repo)
+        return await classify_cve(payload, predictors, repo)
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(503, str(exc)) from exc
 

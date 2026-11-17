@@ -40,6 +40,42 @@ def test_predict_tfidf(client: TestClient):
     assert data["model_hash"] == "test-sha"
 
 
+def test_predict_batch_list_success(client: TestClient):
+    """Prueba que /predict acepte una lista y retorne la lista de resultados correspondientes."""
+    payload = [
+        {
+            "cve_id": f"CVE-BATCH-{i:03d}",
+            "description": f"Buffer overflow flaw {i}",
+            "engine": "tfidf",
+        }
+        for i in range(1, 4)
+    ]
+    res = client.post("/predict", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert isinstance(data, list)
+    assert len(data) == 3
+    assert data[0]["cve_id"] == "CVE-BATCH-001"
+
+
+def test_predict_batch_empty_list_returns_empty_list(client: TestClient):
+    """Verifica que una lista vacia retorne lista vacia []."""
+    res = client.post("/predict", json=[])
+    assert res.status_code == 200
+    assert res.json() == []
+
+
+def test_predict_batch_rejects_more_than_50_items(client: TestClient):
+    """Verifica que rechace con HTTP 400 si la lista excede el limite estricto de 50 CVEs."""
+    payload = [
+        {"cve_id": f"CVE-51-{i}", "description": "XSS attack", "engine": "tfidf"}
+        for i in range(51)
+    ]
+    res = client.post("/predict", json=payload)
+    assert res.status_code == 400
+    assert "50" in res.json()["detail"]
+
+
 def test_low_confidence_metric_increments_for_uncertain_predictions():
     """Verifica que una prediccion con confianza < 0.50 incremente cve_low_confidence_total."""
     low_conf_tfidf = FakePredictor(severity="MEDIUM", confidence=0.35)
