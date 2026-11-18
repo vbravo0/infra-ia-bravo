@@ -22,7 +22,7 @@ def evaluate_predictions(y_true: list[str], y_pred: list[str]) -> dict[str, floa
     return {"macro_f1": score}
 
 
-def check_quality_gate(macro_f1: float, min_f1: float = MIN_MACRO_F1) -> bool:
+def check_quality_gate(macro_f1: float, min_f1: float = MIN_MACRO_F1) -> None:
     """Valida si el Macro F1 cumple con el umbral minimo aceptable para produccion.
 
     Si no lo cumple, lanza ValueError para abortar el pipeline de CI/CD.
@@ -31,7 +31,6 @@ def check_quality_gate(macro_f1: float, min_f1: float = MIN_MACRO_F1) -> bool:
         raise ValueError(
             f"Quality gate rechazado: Macro F1={macro_f1:.4f} inferior al umbral minimo ({min_f1:.4f})"
         )
-    return True
 
 
 def mcnemar_test(

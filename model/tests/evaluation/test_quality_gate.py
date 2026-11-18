@@ -8,8 +8,8 @@ from eval.evaluate_tfidf import check_quality_gate, evaluate_predictions
 
 
 def test_quality_gate_passes_when_macro_f1_meets_threshold():
-    """Aprueba el despliegue cuando Macro F1 cumple el umbral minimo (0.60)."""
-    assert check_quality_gate(macro_f1=0.65, min_f1=0.60) is True
+    """No lanza excepcion cuando Macro F1 cumple el umbral minimo (0.60)."""
+    check_quality_gate(macro_f1=0.65, min_f1=0.60)
 
 
 def test_quality_gate_raises_error_when_macro_f1_drops():
