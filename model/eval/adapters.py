@@ -17,7 +17,7 @@ class EvaluatableModel(Protocol):
 
 
 class TfidfEvaluator:
-    """Adaptador de evaluacion para el modelo scikit-learn (TF-IDF + LogisticRegression)."""
+    """Adaptador de inferencia para el modelo supervisado TF-IDF + LogisticRegression."""
 
     def __init__(self, model_path: str = "model.joblib"):
         import joblib
@@ -30,7 +30,7 @@ class TfidfEvaluator:
 
 
 class OllamaEvaluator:
-    """Adaptador de evaluacion para LLMs en Ollama con persistencia de checkpoints."""
+    """Adaptador de inferencia para LLMs en Ollama con persistencia de checkpoints."""
 
     def __init__(
         self,
@@ -47,8 +47,34 @@ class OllamaEvaluator:
             "OLLAMA_URL", "http://localhost:11434/api/chat"
         )
 
-    def predict_batch(self, descriptions: Sequence[str]) -> list[str]:
-        """Corre inferencia asincrona llamando a la API de Ollama con checkpointing."""
+    def _load_checkpoint(self, total_expected: int) -> list[str]:
+        """Carga predicciones previas si el archivo de checkpoint existe."""
+        if not self.checkpoint_path or not os.path.exists(self.checkpoint_path):
+            return []
+
+        df_ckpt = pd.read_csv(self.checkpoint_path)
+        if "PREDICTION" not in df_ckpt.columns:
+            return []
+
+        predictions = df_ckpt["PREDICTION"].dropna().tolist()
+        print(
+            f"Retomando desde checkpoint: {len(predictions)}/{total_expected} casos listos."
+        )
+        return predictions
+
+    def _save_checkpoint(self, predictions: list[str]) -> None:
+        """Persiste las predicciones acumuladas a disco."""
+        if self.checkpoint_path:
+            pd.DataFrame({"PREDICTION": predictions}).to_csv(
+                self.checkpoint_path, index=False
+            )
+
+    async def _predict_stream(
+        self,
+        descriptions: Sequence[str],
+        initial_predictions: list[str],
+    ) -> list[str]:
+        """Ejecuta inferencia elemento a elemento guardando checkpoints cada 25 casos."""
         from domain.predictor import OllamaPredictor
 
         options = {
@@ -58,28 +84,23 @@ class OllamaEvaluator:
             "num_gpu": 0,
         }
         predictor = OllamaPredictor(prompt_text=self.prompt_text, options=options)
+        predictions = list(initial_predictions)
+        total = len(descriptions)
 
-        predictions: list[str] = []
-        start_idx = 0
-        if self.checkpoint_path and os.path.exists(self.checkpoint_path):
-            df_ckpt = pd.read_csv(self.checkpoint_path)
-            predictions = df_ckpt["PREDICTION"].tolist()
-            start_idx = len(predictions)
-            print(
-                f"Retomando desde checkpoint: {start_idx}/{len(descriptions)} casos listos."
-            )
+        for i in range(len(predictions), total):
+            severity, _, _, _ = await predictor.predict(descriptions[i])
+            predictions.append(severity)
 
-        async def _run() -> list[str]:
-            for i in range(start_idx, len(descriptions)):
-                desc = descriptions[i]
-                severity, _, _, _ = await predictor.predict(desc)
-                predictions.append(severity)
-                if (i + 1) % 25 == 0 or (i + 1) == len(descriptions):
-                    print(f"Progreso LLM: {i + 1}/{len(descriptions)}...")
-                    if self.checkpoint_path:
-                        pd.DataFrame({"PREDICTION": predictions}).to_csv(
-                            self.checkpoint_path, index=False
-                        )
-            return predictions
+            if (i + 1) % 25 == 0 or (i + 1) == total:
+                print(f"Progreso LLM: {i + 1}/{total}...")
+                self._save_checkpoint(predictions)
 
-        return asyncio.run(_run())
+        return predictions
+
+    def predict_batch(self, descriptions: Sequence[str]) -> list[str]:
+        """Punto de entrada sincrono que orquesta checkpointing e inferencia."""
+        cached_predictions = self._load_checkpoint(len(descriptions))
+        if len(cached_predictions) >= len(descriptions):
+            return cached_predictions[: len(descriptions)]
+
+        return asyncio.run(self._predict_stream(descriptions, cached_predictions))
