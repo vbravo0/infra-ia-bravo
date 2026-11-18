@@ -19,13 +19,13 @@ predict-llm: ## genera las predicciones batch del LLM en Docker (con checkpoints
 	docker compose -f docker-compose.integration.yml run --rm integration-runner python eval/predict.py --model llm --data data/sample_1000.csv --output data/predictions_llm.csv --prompt prompts/system_prompt.txt
 
 eval-tfidf: ## corre el Quality Gate de CI/CD para TF-IDF en Docker (frena si Macro F1 < 0.60)
-	docker compose -f docker-compose.unit.yml run --rm test-runner python eval/evaluate.py f1 --pred data/predictions_tfidf.csv
+	docker compose -f docker-compose.unit.yml run --rm test-runner python eval/evaluate.py --pred data/predictions_tfidf.csv
 
 eval-llm: ## corre la evaluacion del LLM calculando F1 sobre sus predicciones en Docker
-	docker compose -f docker-compose.unit.yml run --rm test-runner python eval/evaluate.py f1 --pred data/predictions_llm.csv --no-gate
+	docker compose -f docker-compose.unit.yml run --rm test-runner python eval/evaluate.py --pred data/predictions_llm.csv --no-gate
 
 compare: ## compara dos modelos con McNemar y Bootstrap pareado en Docker (ej: make compare PREDA=... PREDB=...)
-	docker compose -f docker-compose.unit.yml run --rm test-runner python eval/evaluate.py all --pred-a $(PREDA) --pred-b $(PREDB)
+	docker compose -f docker-compose.unit.yml run --rm test-runner python eval/compare.py --pred-a $(PREDA) --pred-b $(PREDB)
 
 test-unit: ## corre las pruebas unitarias aisladas en memoria (0.2s)
 	docker compose -f docker-compose.unit.yml up --build --abort-on-container-exit --exit-code-from test-runner
