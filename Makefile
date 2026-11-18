@@ -13,10 +13,10 @@ train: ## entrena el modelo TF-IDF en Docker -> model.joblib
 	docker compose -f docker-compose.unit.yml run --rm test-runner python train.py
 
 predict-tfidf: ## genera las predicciones batch del modelo TF-IDF en Docker -> data/predictions_tfidf.csv
-	docker compose -f docker-compose.unit.yml run --rm test-runner python eval/predict.py --model tfidf --data data/sample_1000.csv --output data/predictions_tfidf.csv
+	docker compose -f docker-compose.unit.yml run --rm test-runner python -m eval.predict --model tfidf --data data/sample_1000.csv --output data/predictions_tfidf.csv
 
 predict-llm: ## genera las predicciones batch del LLM en Docker (con checkpoints en data/)
-	docker compose -f docker-compose.integration.yml run --rm integration-runner python eval/predict.py --model llm --data data/sample_1000.csv --output data/predictions_llm.csv --prompt prompts/system_prompt.txt
+	docker compose -f docker-compose.integration.yml run --rm integration-runner python -m eval.predict --model llm --data data/sample_1000.csv --output data/predictions_llm.csv --prompt prompts/system_prompt.txt
 
 eval-tfidf: ## corre el Quality Gate de CI/CD para TF-IDF en Docker (frena si Macro F1 < 0.60)
 	docker compose -f docker-compose.unit.yml run --rm test-runner python eval/evaluate.py --pred data/predictions_tfidf.csv
