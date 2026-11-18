@@ -20,7 +20,7 @@ test-integration: ## corre las pruebas de integracion reales contra Ollama y Qwe
 test: test-unit test-integration ## corre ambas suites (unitarias + integracion)
 
 build-model: ## construye la imagen model:$(TAG)
-	docker build --build-arg MODEL_VERSION=$(TAG) -t model:$(TAG) ./model
+	docker build --build-arg MODEL_VERSION=$(TAG) -f model/Dockerfile -t model:$(TAG) .
 
 k3d-up: ## crea el cluster k3s montando tus modelos locales de Ollama en /root/.ollama
 	@if ! k3d cluster list $(K3D_CLUSTER) >/dev/null 2>&1; then \

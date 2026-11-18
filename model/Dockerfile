@@ -4,15 +4,16 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY model/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY sample_500.csv train.py serve.py config.py ./
-COPY domain/ ./domain/
-COPY adapters/ ./adapters/
-COPY api/ ./api/
-COPY templates/ ./templates/
-COPY prompts/ ./prompts/
+COPY data/sample_1000.csv data/sample_1000.csv
+COPY model/train.py model/serve.py model/config.py ./
+COPY model/domain/ ./domain/
+COPY model/adapters/ ./adapters/
+COPY model/api/ ./api/
+COPY model/templates/ ./templates/
+COPY model/prompts/ ./prompts/
 RUN python train.py
 
 ARG MODEL_VERSION=v1

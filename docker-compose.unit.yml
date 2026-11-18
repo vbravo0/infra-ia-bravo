@@ -1,8 +1,8 @@
 services:
   test-runner:
     build:
-      context: ./model
-      dockerfile: Dockerfile.test
+      context: .
+      dockerfile: model/Dockerfile.test
     environment:
       MODEL_VERSION: test-sha
-    command: ["pytest", "tests/unit", "-v", "--disable-warnings"]
+    command: ["pytest", "model/tests/unit", "-v", "--disable-warnings"]

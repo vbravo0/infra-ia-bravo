@@ -11,7 +11,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
 MODEL_PATH = "model.joblib"
-DATA_PATH = "sample_500.csv"
+DATA_PATH = "data/sample_1000.csv"
 
 
 def clean_cve_dataset(df: pd.DataFrame) -> pd.DataFrame:

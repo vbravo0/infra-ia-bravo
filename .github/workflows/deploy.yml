@@ -35,7 +35,7 @@ jobs:
         run: |
           TAG=$(git rev-parse --short HEAD)
           echo "Construyendo imagen con tag: $TAG"
-          docker build --build-arg MODEL_VERSION=$TAG -t gcr.io/mi-proyecto/cve-model:$TAG ./model
+          docker build --build-arg MODEL_VERSION=$TAG -f model/Dockerfile -t gcr.io/mi-proyecto/cve-model:$TAG .
 
       # - name: 7. Desplegar en GKE (Ejemplo en la nube)
       #   run: |

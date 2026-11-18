@@ -11,13 +11,13 @@ services:
 
   integration-runner:
     build:
-      context: ./model
-      dockerfile: Dockerfile.test
+      context: .
+      dockerfile: model/Dockerfile.test
     environment:
       MODEL_VERSION: test-sha
       OLLAMA_URL: http://ollama-test:11434/api/chat
       OLLAMA_MODEL: qwen2.5:1.5b
-    command: ["pytest", "tests/integration", "-v", "--disable-warnings"]
+    command: ["pytest", "model/tests/integration", "-v", "--disable-warnings"]
     depends_on:
       ollama-test:
         condition: service_healthy
