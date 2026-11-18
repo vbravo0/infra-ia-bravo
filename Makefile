@@ -4,10 +4,16 @@ K3D_CLUSTER ?= infra-cloud
 OLLAMA_DIR  ?= /home/vub/.ollama
 
 .DEFAULT_GOAL := help
-.PHONY: help test test-unit test-integration build-model k3d-up k3d-images deploy rollback status clean
+.PHONY: help train eval test test-unit test-eval test-integration build-model k3d-up k3d-images deploy rollback status clean
 
 help: ## lista los comandos
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-18s %s\n", $$1, $$2}'
+
+train: ## entrena el modelo TF-IDF con data/sample_1000.csv -> model.joblib
+	python model/train.py
+
+eval: ## corre el Quality Gate de CI/CD (frena si Macro F1 < 0.60)
+	python evaluate.py
 
 test-unit: ## corre las pruebas unitarias aisladas en memoria (0.2s)
 	docker compose -f docker-compose.unit.yml up --build --abort-on-container-exit --exit-code-from test-runner
