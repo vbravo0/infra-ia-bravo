@@ -4,7 +4,7 @@ K3D_CLUSTER ?= infra-cloud
 OLLAMA_DIR  ?= /home/vub/.ollama
 
 .DEFAULT_GOAL := help
-.PHONY: help train eval-tfidf eval-llm test test-unit test-eval test-integration build-model k3d-up k3d-images deploy rollback status clean
+.PHONY: help train predict-tfidf predict-llm eval-tfidf eval-llm test test-unit test-eval test-integration build-model k3d-up k3d-images deploy rollback status clean
 
 help: ## lista los comandos
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-18s %s\n", $$1, $$2}'
@@ -12,11 +12,17 @@ help: ## lista los comandos
 train: ## entrena el modelo TF-IDF con data/sample_1000.csv -> model.joblib
 	python model/train.py
 
-eval-tfidf: ## corre el Quality Gate de CI/CD para TF-IDF (frena si Macro F1 < 0.60)
-	PYTHONPATH=model:. python model/eval/evaluate.py --model tfidf
+predict-tfidf: ## genera las predicciones batch del modelo TF-IDF en Docker -> data/predictions_tfidf.csv
+	docker compose -f docker-compose.unit.yml run --rm test-runner python eval/predict.py --model tfidf --data data/sample_1000.csv --output data/predictions_tfidf.csv
 
-eval-llm: ## corre la evaluacion del LLM dentro de Docker contra Ollama (con checkpoints en data/)
-	docker compose -f docker-compose.integration.yml run --rm integration-runner python eval/evaluate.py --model llm --checkpoint data/predictions_llm.csv --prompt prompts/system_prompt.txt --no-gate
+predict-llm: ## genera las predicciones batch del LLM dentro de Docker (con checkpoints en data/)
+	docker compose -f docker-compose.integration.yml run --rm integration-runner python eval/predict.py --model llm --data data/sample_1000.csv --output data/predictions_llm.csv --prompt prompts/system_prompt.txt
+
+eval-tfidf: ## corre el Quality Gate de CI/CD para TF-IDF (frena si Macro F1 < 0.60)
+	PYTHONPATH=model:. python model/eval/evaluate.py --metric f1 --model tfidf
+
+eval-llm: ## corre la evaluacion del LLM calculando F1 sobre sus predicciones
+	PYTHONPATH=model:. python model/eval/evaluate.py --metric f1 --pred data/predictions_llm.csv --no-gate
 
 test-unit: ## corre las pruebas unitarias aisladas en memoria (0.2s)
 	docker compose -f docker-compose.unit.yml up --build --abort-on-container-exit --exit-code-from test-runner

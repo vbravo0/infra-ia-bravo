@@ -1,250 +1,176 @@
-"""Modulo de Evaluacion de Calidad y Significancia Estadistica (MLOps / LLMOps).
+"""Modulo de Evaluacion de Metricas y Significancia Estadistica (MLOps / LLMOps).
 
-Soporta evaluacion polimorfica via Protocol/Trait para:
-- TF-IDF (clasificador en scikit-learn / joblib)
-- LLM (Ollama con soporte para comparar prompts y generar checkpoints)
+Consume predicciones (en memoria o desde CSV) y calcula metricas:
+- F1-Score (Macro F1 y Quality Gate)
+- McNemar (test de hipotesis entre dos modelos)
+- Bootstrap pareado (intervalo de confianza al 95% para la diferencia de Macro F1)
 
 Uso CLI:
-    python model/eval/evaluate.py --model tfidf
-    python model/eval/evaluate.py --model llm --prompt model/prompts/system_prompt.txt
-    python model/eval/evaluate.py --compare --prompt-a model/prompts/prompt_a.txt --prompt-b model/prompts/prompt_b.txt
+    # 1. Evaluar Macro F1 de un modelo directo (para CI/CD Quality Gate)
+    python model/eval/evaluate.py --metric f1 --model tfidf
+
+    # 2. Evaluar Macro F1 desde un CSV de predicciones
+    python model/eval/evaluate.py --metric f1 --pred data/predictions_tfidf.csv
+
+    # 3. Comparar dos modelos con McNemar
+    python model/eval/evaluate.py --metric mcnemar --pred-a data/predictions_v1.csv --pred-b data/predictions_v2.csv
+
+    # 4. Comparar dos modelos con Bootstrap pareado (IC 95%)
+    python model/eval/evaluate.py --metric bootstrap --pred-a data/predictions_v1.csv --pred-b data/predictions_v2.csv
 """
 
 from __future__ import annotations
 
 import argparse
-import asyncio
-import os
 import sys
-from typing import Protocol, Sequence
-import numpy as np
 import pandas as pd
-from scipy.stats import chi2
-from sklearn.metrics import f1_score
-
-MIN_MACRO_F1 = 0.60
-
-
-class EvaluatableModel(Protocol):
-    """Protocol / Trait para cualquier modelo que prediga una lista de descripciones."""
-
-    def predict_batch(self, descriptions: Sequence[str]) -> list[str]:
-        """Recibe descripciones de CVEs y retorna la lista de etiquetas de severidad."""
-        ...
+from eval.adapters import EvaluatableModel, OllamaEvaluator, TfidfEvaluator
+from eval.metrics import (
+    MIN_MACRO_F1,
+    check_quality_gate,
+    evaluate_predictions,
+    mcnemar_test,
+    paired_bootstrap_macro_f1,
+)
 
 
-class TfidfEvaluator:
-    """Adaptador de evaluacion para el modelo scikit-learn (TF-IDF + LogisticRegression)."""
-
-    def __init__(self, model_path: str = "model.joblib"):
-        import joblib
-
-        bundle = joblib.load(model_path)
-        self.model = bundle["model"]
-
-    def predict_batch(self, descriptions: Sequence[str]) -> list[str]:
-        return list(self.model.predict(descriptions))
+def load_ground_truth(data_path: str = "data/sample_1000.csv") -> list[str]:
+    """Carga las etiquetas reales (SEVERITY) del dataset."""
+    df = pd.read_csv(data_path).dropna(subset=["SEVERITY"])
+    return df["SEVERITY"].tolist()
 
 
-class OllamaEvaluator:
-    """Adaptador de evaluacion para LLMs en Ollama con persistencia de checkpoints."""
-
-    def __init__(
-        self,
-        prompt_path: str,
-        checkpoint_path: str | None = None,
-        model_name: str = "qwen2.5:1.5b",
-        ollama_url: str | None = None,
-    ):
-        with open(prompt_path, encoding="utf-8") as f:
-            self.prompt_text = f.read().strip()
-        self.checkpoint_path = checkpoint_path
-        self.model_name = model_name or os.environ.get("OLLAMA_MODEL", "qwen2.5:1.5b")
-        self.ollama_url = ollama_url or os.environ.get(
-            "OLLAMA_URL", "http://localhost:11434/api/chat"
-        )
-
-    def predict_batch(self, descriptions: Sequence[str]) -> list[str]:
-        """Corre inferencia sincrona/batch llamando a la API de Ollama con checkpointing."""
-        import httpx
-        from domain.predictor import OllamaPredictor
-
-        options = {
-            "temperature": 0.0,
-            "seed": 42,
-            "num_predict": 10,
-            "num_gpu": 0,
-        }
-        predictor = OllamaPredictor(prompt_text=self.prompt_text, options=options)
-
-        # Cargar checkpoint previo si existe para no re-ejecutar
-        predictions: list[str] = []
-        start_idx = 0
-        if self.checkpoint_path and os.path.exists(self.checkpoint_path):
-            df_ckpt = pd.read_csv(self.checkpoint_path)
-            predictions = df_ckpt["PREDICTION"].tolist()
-            start_idx = len(predictions)
-            print(
-                f"Retomando desde checkpoint: {start_idx}/{len(descriptions)} casos listos."
-            )
-
-        async def _run() -> list[str]:
-            for i in range(start_idx, len(descriptions)):
-                desc = descriptions[i]
-                severity, _, _, _ = await predictor.predict(desc)
-                predictions.append(severity)
-                if (i + 1) % 25 == 0 or (i + 1) == len(descriptions):
-                    print(f"Progreso LLM: {i + 1}/{len(descriptions)}...")
-                    if self.checkpoint_path:
-                        pd.DataFrame({"PREDICTION": predictions}).to_csv(
-                            self.checkpoint_path, index=False
-                        )
-            return predictions
-
-        return asyncio.run(_run())
-
-
-def evaluate_predictions(y_true: list[str], y_pred: list[str]) -> dict[str, float]:
-    """Calcula el Macro F1 real sobre las etiquetas observadas y predichas."""
-    score = float(f1_score(y_true, y_pred, average="macro", zero_division=0))
-    return {"macro_f1": score}
-
-
-def check_quality_gate(macro_f1: float, min_f1: float = MIN_MACRO_F1) -> None:
-    """Valida si el Macro F1 cumple con el umbral minimo aceptable para produccion.
-
-    Si no lo cumple, lanza ValueError para abortar el pipeline de CI/CD.
-    """
-    if macro_f1 < min_f1:
-        raise ValueError(
-            f"Quality gate rechazado: Macro F1={macro_f1:.4f} inferior al umbral minimo ({min_f1:.4f})"
-        )
-
-
-def mcnemar_test(
-    y_true: list[str] | np.ndarray,
-    y_pred_a: list[str] | np.ndarray,
-    y_pred_b: list[str] | np.ndarray,
-) -> dict[str, float]:
-    """Test de McNemar con correccion de continuidad de Edwards (REQ-09)."""
-    y_t = np.array(y_true)
-    correct_a = np.array(y_pred_a) == y_t
-    correct_b = np.array(y_pred_b) == y_t
-
-    b = int(np.sum(correct_a & ~correct_b))
-    c = int(np.sum(~correct_a & correct_b))
-
-    total_discordant = b + c
-    if total_discordant == 0:
-        return {"b": 0, "c": 0, "statistic": 0.0, "p_value": 1.0}
-
-    statistic = float((abs(b - c) - 1.0) ** 2 / total_discordant)
-    p_value = float(1.0 - chi2.cdf(statistic, df=1))
-
-    return {"b": b, "c": c, "statistic": statistic, "p_value": p_value}
-
-
-def paired_bootstrap_macro_f1(
-    y_true: list[str] | np.ndarray,
-    y_pred_a: list[str] | np.ndarray,
-    y_pred_b: list[str] | np.ndarray,
-    n_bootstraps: int = 1000,
-    seed: int = 42,
-) -> dict[str, float]:
-    """Bootstrap pareado sobre Macro F1 entre dos modelos (REQ-09)."""
-    rng = np.random.RandomState(seed)
-    y_t = np.array(y_true)
-    y_a = np.array(y_pred_a)
-    y_b = np.array(y_pred_b)
-    n = len(y_t)
-
-    deltas = []
-    for _ in range(n_bootstraps):
-        idx = rng.randint(0, n, size=n)
-        f1_a = f1_score(y_t[idx], y_a[idx], average="macro", zero_division=0)
-        f1_b = f1_score(y_t[idx], y_b[idx], average="macro", zero_division=0)
-        deltas.append(f1_b - f1_a)
-
-    deltas = np.array(deltas)
-    return {
-        "mean_delta": float(np.mean(deltas)),
-        "ci_lower": float(np.percentile(deltas, 2.5)),
-        "ci_upper": float(np.percentile(deltas, 97.5)),
-        "p_value": float(np.mean(deltas <= 0)),
-    }
-
-
-def run_evaluation(
-    evaluator: EvaluatableModel,
-    data_path: str = "data/sample_1000.csv",
-    enforce_gate: bool = True,
-) -> float:
-    """Evalua un modelo generico que cumpla el Protocol EvaluatableModel."""
-    print(f"--- Evaluando modelo sobre {data_path} ---")
-    df = pd.read_csv(data_path).dropna(subset=["DESCRIPTION", "SEVERITY"])
-
-    y_true = df["SEVERITY"].tolist()
-    y_pred = evaluator.predict_batch(df["DESCRIPTION"].tolist())
-
-    metrics = evaluate_predictions(y_true, y_pred)
-    macro_f1 = metrics["macro_f1"]
-    print(f"Resultado: Macro F1-Score = {macro_f1:.4f}")
-
-    if enforce_gate:
-        check_quality_gate(macro_f1, min_f1=MIN_MACRO_F1)
-        print("✅ APROBADO: Cumple con el Quality Gate de produccion.")
-    return macro_f1
+def load_predictions_from_csv(csv_path: str) -> list[str]:
+    """Carga la columna de predicciones desde un archivo CSV."""
+    df = pd.read_csv(csv_path)
+    col = "PREDICTION" if "PREDICTION" in df.columns else df.columns[-1]
+    return df[col].astype(str).tolist()
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Evaluador unificado de modelos CVE")
+    parser = argparse.ArgumentParser(
+        description="Evaluador de metricas y estadistica CVE"
+    )
     parser.add_argument(
-        "--model",
-        choices=["tfidf", "llm"],
-        default="tfidf",
-        help="Tipo de modelo a evaluar (default: tfidf)",
+        "--metric",
+        choices=["f1", "mcnemar", "bootstrap", "all"],
+        default="f1",
+        help="Metrica o prueba estadistica a ejecutar (default: f1)",
     )
     parser.add_argument(
         "--data",
         default="data/sample_1000.csv",
-        help="Ruta al dataset de evaluacion",
+        help="Dataset con la verdad de terreno (etiqueta real SEVERITY)",
     )
+    # Evaluacion de un solo modelo (online / CI-CD)
     parser.add_argument(
-        "--model-path",
-        default="model.joblib",
-        help="Ruta al binario joblib (para tfidf)",
-    )
-    parser.add_argument(
-        "--prompt",
-        default="model/prompts/system_prompt.txt",
-        help="Ruta al system prompt (para llm)",
-    )
-    parser.add_argument(
-        "--checkpoint",
+        "--model",
+        choices=["tfidf", "llm"],
         default=None,
-        help="Ruta a CSV de checkpoint para inferencias largas de LLM",
+        help="Ejecutar inferencia en memoria para el modelo indicado",
+    )
+    parser.add_argument(
+        "--pred",
+        default=None,
+        help="Ruta al CSV con predicciones de un modelo para calcular F1",
+    )
+    # Comparacion entre dos modelos
+    parser.add_argument(
+        "--pred-a",
+        default=None,
+        help="Ruta al CSV de predicciones del Modelo A",
+    )
+    parser.add_argument(
+        "--pred-b",
+        default=None,
+        help="Ruta al CSV de predicciones del Modelo B",
     )
     parser.add_argument(
         "--no-gate",
         action="store_true",
-        help="No lanzar error si Macro F1 < 0.60 (util para diagnostico)",
+        help="No lanzar error si Macro F1 < 0.60 (diagnostico)",
     )
 
     args = parser.parse_args()
+    y_true = load_ground_truth(args.data)
 
-    if args.model == "tfidf":
-        evaluator: EvaluatableModel = TfidfEvaluator(model_path=args.model_path)
-    else:
-        evaluator = OllamaEvaluator(
-            prompt_path=args.prompt,
-            checkpoint_path=args.checkpoint,
+    # ----------------------------------------------------
+    # Caso 1: Evaluar F1 sobre un modelo (online o CSV)
+    # ----------------------------------------------------
+    if args.metric == "f1":
+        if args.pred:
+            y_pred = load_predictions_from_csv(args.pred)
+        elif args.model == "tfidf":
+            evaluator: EvaluatableModel = TfidfEvaluator()
+            df = pd.read_csv(args.data)
+            y_pred = evaluator.predict_batch(df["DESCRIPTION"].tolist())
+        else:
+            print(
+                "❌ Error: Debes especificar --model tfidf o --pred <archivo.csv>",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        metrics = evaluate_predictions(y_true, y_pred)
+        macro_f1 = metrics["macro_f1"]
+        print(f"--- [EVALUACION F1] Dataset: {args.data} ---")
+        print(f"Macro F1-Score: {macro_f1:.4f}")
+
+        if not args.no_gate:
+            check_quality_gate(macro_f1, min_f1=MIN_MACRO_F1)
+            print("✅ APROBADO: Cumple con el Quality Gate de produccion.")
+        return
+
+    # ----------------------------------------------------
+    # Caso 2: Comparar dos modelos (McNemar, Bootstrap o All)
+    # ----------------------------------------------------
+    if not args.pred_a or not args.pred_b:
+        print(
+            "❌ Error: Para pruebas comparativas debes proveer --pred-a y --pred-b.",
+            file=sys.stderr,
         )
+        sys.exit(1)
 
-    run_evaluation(
-        evaluator=evaluator,
-        data_path=args.data,
-        enforce_gate=not args.no_gate,
-    )
+    y_pred_a = load_predictions_from_csv(args.pred_a)
+    y_pred_b = load_predictions_from_csv(args.pred_b)
+
+    if len(y_pred_a) != len(y_true) or len(y_pred_b) != len(y_true):
+        print(
+            f"❌ Error: La longitud de predicciones ({len(y_pred_a)}, {len(y_pred_b)}) no coincide con el dataset ({len(y_true)}).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    f1_a = evaluate_predictions(y_true, y_pred_a)["macro_f1"]
+    f1_b = evaluate_predictions(y_true, y_pred_b)["macro_f1"]
+
+    print(f"--- [COMPARACION DE MODELOS] ---")
+    print(f"Modelo A ({args.pred_a}): Macro F1 = {f1_a:.4f}")
+    print(f"Modelo B ({args.pred_b}): Macro F1 = {f1_b:.4f}")
+
+    if args.metric in ["mcnemar", "all"]:
+        mc = mcnemar_test(y_true, y_pred_a, y_pred_b)
+        print(f"\n[Test de McNemar]")
+        print(
+            f"  Discordancias: A acierta y B falla = {mc['b']} | A falla y B acierta = {mc['c']}"
+        )
+        print(f"  Chi2 (Edwards): {mc['statistic']:.4f}")
+        print(f"  p-value:        {mc['p_value']:.6f}")
+        sig = (
+            "Significativa (p < 0.05)"
+            if mc["p_value"] < 0.05
+            else "No significativa (p >= 0.05)"
+        )
+        print(f"  Conclusion:     {sig}")
+
+    if args.metric in ["bootstrap", "all"]:
+        boot = paired_bootstrap_macro_f1(y_true, y_pred_a, y_pred_b)
+        print(f"\n[Bootstrap Pareado (Macro F1, 1000 iteraciones)]")
+        print(f"  Delta promedio (B - A): {boot['mean_delta']:+.4f}")
+        print(
+            f"  IC 95%:                [{boot['ci_lower']:+.4f}, {boot['ci_upper']:+.4f}]"
+        )
+        print(f"  p-value empirico:       {boot['p_value']:.6f}")
 
 
 if __name__ == "__main__":
