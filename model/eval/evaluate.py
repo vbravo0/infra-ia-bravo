@@ -1,10 +1,8 @@
 """Modulo de Evaluacion de Metricas y Significancia Estadistica (MLOps / LLMOps).
 
-Estructura modular con funciones de evaluacion independientes:
-- run_f1_evaluation: Calcula Macro F1 y valida Quality Gate.
-- run_mcnemar_evaluation: Compara discordancias y significancia Chi2.
-- run_bootstrap_evaluation: Estima intervalo de confianza al 95% para la mejora.
-- run_comparative_evaluation: Ejecuta suite estadistica completa entre dos modelos.
+Sigue el principio de Responsabilidad Unica (SRP):
+- Subcomandos CLI dedicados (f1, mcnemar, bootstrap, all) sin parametros huerfanos.
+- Funciones de computo desacopladas de I/O y de formateo de texto.
 """
 
 from __future__ import annotations
@@ -20,36 +18,44 @@ from eval.metrics import (
     paired_bootstrap_macro_f1,
 )
 
-
-def load_ground_truth(data_path: str = "data/sample_1000.csv") -> list[str]:
-    """Carga las etiquetas reales (SEVERITY) del dataset."""
-    df = pd.read_csv(data_path).dropna(subset=["SEVERITY"])
-    return df["SEVERITY"].tolist()
+# ---------------------------------------------------------------------------
+# 1. Carga y alineacion de datos (I/O)
+# ---------------------------------------------------------------------------
 
 
-def load_predictions(csv_path: str) -> list[str]:
-    """Carga la columna de predicciones desde un archivo CSV."""
+def load_series(csv_path: str, column_name: str) -> list[str]:
+    """Lee una columna especifica de un CSV eliminando registros nulos."""
     df = pd.read_csv(csv_path)
-    col = "PREDICTION" if "PREDICTION" in df.columns else df.columns[-1]
-    return df[col].astype(str).tolist()
+    if column_name in df.columns:
+        col = df[column_name]
+    else:
+        col = df.iloc[:, -1]
+    return col.dropna().astype(str).tolist()
 
 
-def run_f1_evaluation(
-    data_path: str,
-    pred_path: str,
-    enforce_gate: bool = True,
-) -> float:
-    """Evalua el Macro F1 de un archivo de predicciones contra la verdad de terreno."""
-    y_true = load_ground_truth(data_path)
-    y_pred = load_predictions(pred_path)
+def align_predictions(
+    y_true: list[str], y_pred: list[str]
+) -> tuple[list[str], list[str]]:
+    """Alinea el tamano de las listas cortando a la menor longitud comun."""
+    min_len = min(len(y_true), len(y_pred))
+    return y_true[:min_len], y_pred[:min_len]
 
-    if len(y_pred) < len(y_true):
-        print(f"⚠️ Muestra parcial: evaluando {len(y_pred)} de {len(y_true)} casos.")
-        y_true = y_true[: len(y_pred)]
+
+# ---------------------------------------------------------------------------
+# 2. Casos de Uso / Comandos de Evaluacion (Logica de Negocio)
+# ---------------------------------------------------------------------------
+
+
+def evaluate_f1(data_path: str, pred_path: str, enforce_gate: bool) -> float:
+    """Calcula Macro F1 y valida contra el umbral minimo de produccion."""
+    raw_true = load_series(data_path, "SEVERITY")
+    raw_pred = load_series(pred_path, "PREDICTION")
+    y_true, y_pred = align_predictions(raw_true, raw_pred)
 
     score = evaluate_predictions(y_true, y_pred)["macro_f1"]
     print(f"--- [EVALUACION F1] Dataset: {data_path} | Predicciones: {pred_path} ---")
-    print(f"Macro F1-Score: {score:.4f}")
+    print(f"Muestras evaluadas: {len(y_true)}")
+    print(f"Macro F1-Score:     {score:.4f}")
 
     if enforce_gate:
         check_quality_gate(score, min_f1=MIN_MACRO_F1)
@@ -57,126 +63,112 @@ def run_f1_evaluation(
     return score
 
 
-def run_mcnemar_evaluation(
+def evaluate_mcnemar(
     data_path: str, pred_a_path: str, pred_b_path: str
 ) -> dict[str, float]:
-    """Compara estadisticamente las discordancias entre dos modelos via McNemar."""
-    y_true = load_ground_truth(data_path)
-    y_pred_a = load_predictions(pred_a_path)
-    y_pred_b = load_predictions(pred_b_path)
+    """Calcula el test de significancia de McNemar entre dos modelos."""
+    y_true = load_series(data_path, "SEVERITY")
+    y_pred_a = load_series(pred_a_path, "PREDICTION")
+    y_pred_b = load_series(pred_b_path, "PREDICTION")
 
-    mc = mcnemar_test(y_true, y_pred_a, y_pred_b)
-    print(f"\n[Test de McNemar]")
+    min_len = min(len(y_true), len(y_pred_a), len(y_pred_b))
+    res = mcnemar_test(y_true[:min_len], y_pred_a[:min_len], y_pred_b[:min_len])
+
+    print(f"\n[Test de McNemar] (Muestras: {min_len})")
     print(
-        f"  Discordancias: A acierta y B falla = {mc['b']} | A falla y B acierta = {mc['c']}"
+        f"  Discordancias: A acierta y B falla = {res['b']} | A falla y B acierta = {res['c']}"
     )
-    print(f"  Chi2 (Edwards): {mc['statistic']:.4f}")
-    print(f"  p-value:        {mc['p_value']:.6f}")
-    sig = (
+    print(f"  Chi2 (Edwards): {res['statistic']:.4f}")
+    print(f"  p-value:        {res['p_value']:.6f}")
+    conclusion = (
         "Significativa (p < 0.05)"
-        if mc["p_value"] < 0.05
+        if res["p_value"] < 0.05
         else "No significativa (p >= 0.05)"
     )
-    print(f"  Conclusion:     {sig}")
-    return mc
+    print(f"  Conclusion:     {conclusion}")
+    return res
 
 
-def run_bootstrap_evaluation(
+def evaluate_bootstrap(
     data_path: str, pred_a_path: str, pred_b_path: str
 ) -> dict[str, float]:
-    """Calcula intervalo de confianza al 95% para la diferencia de Macro F1 (B - A)."""
-    y_true = load_ground_truth(data_path)
-    y_pred_a = load_predictions(pred_a_path)
-    y_pred_b = load_predictions(pred_b_path)
+    """Calcula el intervalo de confianza al 95% para la diferencia de Macro F1 (B - A)."""
+    y_true = load_series(data_path, "SEVERITY")
+    y_pred_a = load_series(pred_a_path, "PREDICTION")
+    y_pred_b = load_series(pred_b_path, "PREDICTION")
 
-    boot = paired_bootstrap_macro_f1(y_true, y_pred_a, y_pred_b)
-    print(f"\n[Bootstrap Pareado (Macro F1, 1000 iteraciones)]")
-    print(f"  Delta promedio (B - A): {boot['mean_delta']:+.4f}")
-    print(
-        f"  IC 95%:                [{boot['ci_lower']:+.4f}, {boot['ci_upper']:+.4f}]"
+    min_len = min(len(y_true), len(y_pred_a), len(y_pred_b))
+    res = paired_bootstrap_macro_f1(
+        y_true[:min_len], y_pred_a[:min_len], y_pred_b[:min_len]
     )
-    print(f"  p-value empirico:       {boot['p_value']:.6f}")
-    return boot
+
+    print(f"\n[Bootstrap Pareado (Macro F1, 1000 iteraciones)] (Muestras: {min_len})")
+    print(f"  Delta promedio (B - A): {res['mean_delta']:+.4f}")
+    print(f"  IC 95%:                [{res['ci_lower']:+.4f}, {res['ci_upper']:+.4f}]")
+    print(f"  p-value empirico:       {res['p_value']:.6f}")
+    return res
 
 
-def run_comparative_evaluation(
-    data_path: str, pred_a_path: str, pred_b_path: str
-) -> None:
-    """Ejecuta el analisis estadistico comparativo completo (F1s + McNemar + Bootstrap)."""
-    y_true = load_ground_truth(data_path)
-    y_pred_a = load_predictions(pred_a_path)
-    y_pred_b = load_predictions(pred_b_path)
+def evaluate_all(data_path: str, pred_a_path: str, pred_b_path: str) -> None:
+    """Ejecuta la suite comparativa completa: F1 individuales + McNemar + Bootstrap."""
+    y_true = load_series(data_path, "SEVERITY")
+    y_pred_a = load_series(pred_a_path, "PREDICTION")
+    y_pred_b = load_series(pred_b_path, "PREDICTION")
 
-    f1_a = evaluate_predictions(y_true, y_pred_a)["macro_f1"]
-    f1_b = evaluate_predictions(y_true, y_pred_b)["macro_f1"]
+    min_len = min(len(y_true), len(y_pred_a), len(y_pred_b))
+    f1_a = evaluate_predictions(y_true[:min_len], y_pred_a[:min_len])["macro_f1"]
+    f1_b = evaluate_predictions(y_true[:min_len], y_pred_b[:min_len])["macro_f1"]
 
-    print(f"--- [COMPARACION DE MODELOS] ---")
+    print("--- [COMPARACION DE MODELOS] ---")
     print(f"Modelo A ({pred_a_path}): Macro F1 = {f1_a:.4f}")
     print(f"Modelo B ({pred_b_path}): Macro F1 = {f1_b:.4f}")
 
-    run_mcnemar_evaluation(data_path, pred_a_path, pred_b_path)
-    run_bootstrap_evaluation(data_path, pred_a_path, pred_b_path)
+    evaluate_mcnemar(data_path, pred_a_path, pred_b_path)
+    evaluate_bootstrap(data_path, pred_a_path, pred_b_path)
 
 
-DISPATCHER = {
-    "f1": lambda args: run_f1_evaluation(
-        data_path=args.data,
-        pred_path=args.pred,
-        enforce_gate=not args.no_gate,
-    ),
-    "mcnemar": lambda args: run_mcnemar_evaluation(
-        data_path=args.data,
-        pred_a_path=args.pred_a,
-        pred_b_path=args.pred_b,
-    ),
-    "bootstrap": lambda args: run_bootstrap_evaluation(
-        data_path=args.data,
-        pred_a_path=args.pred_a,
-        pred_b_path=args.pred_b,
-    ),
-    "all": lambda args: run_comparative_evaluation(
-        data_path=args.data,
-        pred_a_path=args.pred_a,
-        pred_b_path=args.pred_b,
-    ),
-}
+# ---------------------------------------------------------------------------
+# 3. Interfaz de Linea de Comandos (CLI via Subparsers estrictos)
+# ---------------------------------------------------------------------------
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Evaluador de metricas y estadistica CVE"
+        description="Evaluador de metricas y significancia estadistica"
     )
-    parser.add_argument(
-        "--metric",
-        choices=["f1", "mcnemar", "bootstrap", "all"],
-        default="f1",
-        help="Metrica o prueba estadistica a ejecutar (default: f1)",
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # Subcomando: f1
+    p_f1 = subparsers.add_parser("f1", help="Evalua Macro F1 y valida Quality Gate")
+    p_f1.add_argument(
+        "--data", default="data/sample_1000.csv", help="Dataset con ground truth"
     )
-    parser.add_argument(
-        "--data",
-        default="data/sample_1000.csv",
-        help="Dataset con la verdad de terreno (etiqueta real SEVERITY)",
+    p_f1.add_argument("--pred", required=True, help="CSV con predicciones del modelo")
+    p_f1.add_argument("--no-gate", action="store_true", help="No abortar si F1 < 0.60")
+
+    # Helper para subcomandos comparativos (pred-a y pred-b obligatorios)
+    def add_comparison_args(subparser: argparse.ArgumentParser) -> None:
+        subparser.add_argument(
+            "--data", default="data/sample_1000.csv", help="Dataset con ground truth"
+        )
+        subparser.add_argument(
+            "--pred-a", required=True, help="CSV predicciones Modelo A"
+        )
+        subparser.add_argument(
+            "--pred-b", required=True, help="CSV predicciones Modelo B"
+        )
+
+    p_mcnemar = subparsers.add_parser("mcnemar", help="Calcula test de McNemar")
+    add_comparison_args(p_mcnemar)
+
+    p_bootstrap = subparsers.add_parser("bootstrap", help="Calcula Bootstrap pareado")
+    add_comparison_args(p_bootstrap)
+
+    p_all = subparsers.add_parser(
+        "all", help="Ejecuta comparacion completa (F1s + McNemar + Bootstrap)"
     )
-    parser.add_argument(
-        "--pred",
-        default=None,
-        help="Ruta al CSV con predicciones de un modelo para calcular F1",
-    )
-    parser.add_argument(
-        "--pred-a",
-        default=None,
-        help="Ruta al CSV de predicciones del Modelo A",
-    )
-    parser.add_argument(
-        "--pred-b",
-        default=None,
-        help="Ruta al CSV de predicciones del Modelo B",
-    )
-    parser.add_argument(
-        "--no-gate",
-        action="store_true",
-        help="No lanzar error si Macro F1 < 0.60 (diagnostico)",
-    )
+    add_comparison_args(p_all)
+
     return parser
 
 
@@ -184,10 +176,17 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    action = DISPATCHER.get(args.metric)
-    if not action:
-        parser.error(f"Metrica no soportada: {args.metric}")
-    action(args)
+    commands = {
+        "f1": lambda: evaluate_f1(args.data, args.pred, not args.no_gate),
+        "mcnemar": lambda: evaluate_mcnemar(args.data, args.pred_a, args.pred_b),
+        "bootstrap": lambda: evaluate_bootstrap(args.data, args.pred_a, args.pred_b),
+        "all": lambda: evaluate_all(args.data, args.pred_a, args.pred_b),
+    }
+
+    handler = commands.get(args.command)
+    if not handler:
+        parser.error(f"Comando desconocido: {args.command}")
+    handler()
 
 
 if __name__ == "__main__":
