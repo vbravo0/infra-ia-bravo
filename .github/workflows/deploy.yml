@@ -42,10 +42,10 @@ jobs:
 
       - name: 7. Quality Gate (Eval TF-IDF Automatizada que frena el deploy)
         env:
-          PYTHONPATH: ${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}/model:${{ github.workspace }}
         run: |
           # Si este script da error (exit 1), el pipeline SE FRENA ACA
-          python eval/evaluate_tfidf.py
+          python model/eval/evaluate_tfidf.py
 
       - name: 8. Construir Imagen Docker (Solo si pasaron los tests y el Quality Gate)
         run: |
