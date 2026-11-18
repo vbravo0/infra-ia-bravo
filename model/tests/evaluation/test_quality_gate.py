@@ -4,7 +4,7 @@ Separa estrictamente la evaluacion del modelo de los tests de software/API.
 """
 
 import pytest  # type: ignore
-from evaluate_tfidf import check_quality_gate, evaluate_predictions
+from eval.evaluate_tfidf import check_quality_gate, evaluate_predictions
 
 
 def test_quality_gate_passes_when_macro_f1_meets_threshold():

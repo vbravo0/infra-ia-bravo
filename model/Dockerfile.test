@@ -5,7 +5,7 @@ COPY model/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt pytest==8.3.4 pytest-asyncio==0.25.2
 
 COPY data/sample_1000.csv data/sample_1000.csv
-COPY evaluate_tfidf.py ./
+COPY eval/ ./eval/
 COPY model/train.py model/serve.py model/config.py ./
 COPY model/domain/ ./domain/
 COPY model/adapters/ ./adapters/

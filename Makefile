@@ -13,7 +13,7 @@ train: ## entrena el modelo TF-IDF con data/sample_1000.csv -> model.joblib
 	python model/train.py
 
 eval-tfidf: ## corre el Quality Gate de CI/CD para TF-IDF (frena si Macro F1 < 0.60)
-	python evaluate_tfidf.py
+	PYTHONPATH=. python eval/evaluate_tfidf.py
 
 test-unit: ## corre las pruebas unitarias aisladas en memoria (0.2s)
 	docker compose -f docker-compose.unit.yml up --build --abort-on-container-exit --exit-code-from test-runner
