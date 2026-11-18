@@ -4,7 +4,7 @@ K3D_CLUSTER ?= infra-cloud
 OLLAMA_DIR  ?= /home/vub/.ollama
 
 .DEFAULT_GOAL := help
-.PHONY: help train eval-tfidf test test-unit test-eval test-integration build-model k3d-up k3d-images deploy rollback status clean
+.PHONY: help train eval-tfidf eval-llm test test-unit test-eval test-integration build-model k3d-up k3d-images deploy rollback status clean
 
 help: ## lista los comandos
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-18s %s\n", $$1, $$2}'
@@ -13,7 +13,10 @@ train: ## entrena el modelo TF-IDF con data/sample_1000.csv -> model.joblib
 	python model/train.py
 
 eval-tfidf: ## corre el Quality Gate de CI/CD para TF-IDF (frena si Macro F1 < 0.60)
-	PYTHONPATH=model:. python model/eval/evaluate_tfidf.py
+	PYTHONPATH=model:. python model/eval/evaluate.py --model tfidf
+
+eval-llm: ## corre la evaluacion offline del LLM contra Ollama
+	PYTHONPATH=model:. python model/eval/evaluate.py --model llm --checkpoint data/predictions_llm.csv --no-gate
 
 test-unit: ## corre las pruebas unitarias aisladas en memoria (0.2s)
 	docker compose -f docker-compose.unit.yml up --build --abort-on-container-exit --exit-code-from test-runner

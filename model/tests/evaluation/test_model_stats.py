@@ -5,7 +5,7 @@ acordados en la devolucion del foro con el docente David Petrocelli.
 """
 
 import numpy as np
-from eval.evaluate_tfidf import mcnemar_test, paired_bootstrap_macro_f1
+from eval.evaluate import mcnemar_test, paired_bootstrap_macro_f1
 
 
 def test_mcnemar_identical_models_yields_p_value_one():
