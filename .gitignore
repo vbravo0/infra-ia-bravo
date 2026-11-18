@@ -1,1 +1,65 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# IDEs y editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Datasets pesados descargados (fuente cruda)
 data/CVE_CWE_2025.csv
+*.zip
+*.tar.gz
+
+# Model artifacts locales (se generan en build time)
+*.joblib
+model/model.joblib
+
+# OS generated
+.DS_Store
+Thumbs.db
