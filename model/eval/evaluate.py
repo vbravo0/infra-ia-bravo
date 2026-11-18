@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import sys
 import pandas as pd
-from eval.adapters import EvaluatableModel, TfidfEvaluator
 from eval.metrics import (
     MIN_MACRO_F1,
     check_quality_gate,
@@ -37,29 +36,19 @@ def load_predictions(csv_path: str) -> list[str]:
 
 def run_f1_evaluation(
     data_path: str,
-    pred_path: str | None = None,
-    model_name: str | None = None,
+    pred_path: str,
     enforce_gate: bool = True,
 ) -> float:
-    """Evalua el Macro F1 de un modelo y valida el Quality Gate de CI/CD."""
+    """Evalua el Macro F1 de un archivo de predicciones contra la verdad de terreno."""
     y_true = load_ground_truth(data_path)
+    y_pred = load_predictions(pred_path)
 
-    if pred_path:
-        y_pred = load_predictions(pred_path)
-        if len(y_pred) < len(y_true):
-            print(
-                f"⚠️ Muestra parcial: evaluando {len(y_pred)} de {len(y_true)} casos."
-            )
-            y_true = y_true[: len(y_pred)]
-    elif model_name == "tfidf":
-        evaluator: EvaluatableModel = TfidfEvaluator()
-        df = pd.read_csv(data_path)
-        y_pred = evaluator.predict_batch(df["DESCRIPTION"].tolist())
-    else:
-        raise ValueError("Debes especificar --model tfidf o --pred <archivo.csv>")
+    if len(y_pred) < len(y_true):
+        print(f"⚠️ Muestra parcial: evaluando {len(y_pred)} de {len(y_true)} casos.")
+        y_true = y_true[: len(y_pred)]
 
     score = evaluate_predictions(y_true, y_pred)["macro_f1"]
-    print(f"--- [EVALUACION F1] Dataset: {data_path} ---")
+    print(f"--- [EVALUACION F1] Dataset: {data_path} | Predicciones: {pred_path} ---")
     print(f"Macro F1-Score: {score:.4f}")
 
     if enforce_gate:
@@ -133,7 +122,6 @@ DISPATCHER = {
     "f1": lambda args: run_f1_evaluation(
         data_path=args.data,
         pred_path=args.pred,
-        model_name=args.model,
         enforce_gate=not args.no_gate,
     ),
     "mcnemar": lambda args: run_mcnemar_evaluation(
@@ -168,12 +156,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--data",
         default="data/sample_1000.csv",
         help="Dataset con la verdad de terreno (etiqueta real SEVERITY)",
-    )
-    parser.add_argument(
-        "--model",
-        choices=["tfidf", "llm"],
-        default=None,
-        help="Ejecutar inferencia en memoria para el modelo indicado",
     )
     parser.add_argument(
         "--pred",

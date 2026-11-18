@@ -19,7 +19,7 @@ predict-llm: ## genera las predicciones batch del LLM en Docker (con checkpoints
 	docker compose -f docker-compose.integration.yml run --rm integration-runner python eval/predict.py --model llm --data data/sample_1000.csv --output data/predictions_llm.csv --prompt prompts/system_prompt.txt
 
 eval-tfidf: ## corre el Quality Gate de CI/CD para TF-IDF en Docker (frena si Macro F1 < 0.60)
-	docker compose -f docker-compose.unit.yml run --rm test-runner python eval/evaluate.py --metric f1 --model tfidf
+	docker compose -f docker-compose.unit.yml run --rm test-runner python eval/evaluate.py --metric f1 --pred data/predictions_tfidf.csv
 
 eval-llm: ## corre la evaluacion del LLM calculando F1 sobre sus predicciones en Docker
 	docker compose -f docker-compose.unit.yml run --rm test-runner python eval/evaluate.py --metric f1 --pred data/predictions_llm.csv --no-gate

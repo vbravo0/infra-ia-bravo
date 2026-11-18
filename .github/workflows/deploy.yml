@@ -45,7 +45,8 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/model:${{ github.workspace }}
         run: |
           # Si este script da error (exit 1), el pipeline SE FRENA ACA
-          python model/eval/evaluate.py --model tfidf
+          python model/eval/predict.py --model tfidf --data data/sample_1000.csv --output data/predictions_tfidf.csv
+          python model/eval/evaluate.py --metric f1 --pred data/predictions_tfidf.csv
 
       - name: 8. Construir Imagen Docker (Solo si pasaron los tests y el Quality Gate)
         run: |
