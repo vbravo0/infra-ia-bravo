@@ -26,7 +26,7 @@ test-integration: ## corre las pruebas de integracion reales contra Ollama y Qwe
 	docker compose -f docker-compose.integration.yml up --build --attach integration-runner --abort-on-container-exit --exit-code-from integration-runner
 	docker compose -f docker-compose.integration.yml down -v
 
-test: test-unit test-integration ## corre ambas suites (unitarias + integracion)
+test: test-unit test-eval test-integration ## corre todas las suites (unitarias + evaluacion + integracion)
 
 build-model: ## construye la imagen model:$(TAG)
 	docker build --build-arg MODEL_VERSION=$(TAG) -f model/Dockerfile -t model:$(TAG) .
