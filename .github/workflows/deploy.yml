@@ -2,9 +2,9 @@ name: CI/CD Pipeline - Eval & Deploy
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
 
 jobs:
   evaluate-and-deploy:
@@ -20,23 +20,33 @@ jobs:
 
       - name: 3. Instalar dependencias
         run: |
-          pip install -r model/requirements.txt
+          pip install -r model/requirements.txt pytest pytest-asyncio
 
       - name: 4. Entrenar / Preparar artefacto (Build Time)
         run: |
-          cd model && python train.py
+          python model/train.py
 
-      - name: 5. Quality Gate (Eval Automatizada que frena el deploy)
+      - name: 5. Tests Unitarios (Software / API)
+        env:
+          PYTHONPATH: ${{ github.workspace }}/model:${{ github.workspace }}
+          MODEL_PATH: ${{ github.workspace }}/model.joblib
+          PROMPT_PATH: ${{ github.workspace }}/model/prompts/system_prompt.txt
+        run: |
+          pytest model/tests/unit -v --disable-warnings
+
+      - name: 6. Tests de Evaluacion (Contratos de Metricas y Estadistica)
+        env:
+          PYTHONPATH: ${{ github.workspace }}/model:${{ github.workspace }}
+        run: |
+          pytest model/tests/evaluation -v --disable-warnings
+
+      - name: 7. Quality Gate (Eval Automatizada que frena el deploy)
         run: |
           # Si este script da error (exit 1), el pipeline SE FRENA ACA
           python evaluate.py
 
-      - name: 6. Construir Imagen Docker (Solo si paso el paso 5)
+      - name: 8. Construir Imagen Docker (Solo si pasaron los tests y el Quality Gate)
         run: |
           TAG=$(git rev-parse --short HEAD)
           echo "Construyendo imagen con tag: $TAG"
           docker build --build-arg MODEL_VERSION=$TAG -f model/Dockerfile -t gcr.io/mi-proyecto/cve-model:$TAG .
-
-      # - name: 7. Desplegar en GKE (Ejemplo en la nube)
-      #   run: |
-      #     helm upgrade --install model ./helm/charts/model --set image.tag=$TAG
