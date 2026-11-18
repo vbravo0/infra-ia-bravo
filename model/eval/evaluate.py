@@ -100,6 +100,11 @@ def main() -> None:
     if args.metric == "f1":
         if args.pred:
             y_pred = load_predictions_from_csv(args.pred)
+            if len(y_pred) < len(y_true):
+                print(
+                    f"⚠️ Evaluando sobre muestra parcial ({len(y_pred)} de {len(y_true)} casos predichos)."
+                )
+                y_true = y_true[: len(y_pred)]
         elif args.model == "tfidf":
             evaluator: EvaluatableModel = TfidfEvaluator()
             df = pd.read_csv(args.data)
