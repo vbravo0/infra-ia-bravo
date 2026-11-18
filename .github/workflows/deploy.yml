@@ -40,10 +40,10 @@ jobs:
         run: |
           pytest model/tests/evaluation -v --disable-warnings
 
-      - name: 7. Quality Gate (Eval Automatizada que frena el deploy)
+      - name: 7. Quality Gate (Eval TF-IDF Automatizada que frena el deploy)
         run: |
           # Si este script da error (exit 1), el pipeline SE FRENA ACA
-          python evaluate.py
+          python evaluate_tfidf.py
 
       - name: 8. Construir Imagen Docker (Solo si pasaron los tests y el Quality Gate)
         run: |
