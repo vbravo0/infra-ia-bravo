@@ -9,6 +9,7 @@ from __future__ import annotations
 import sys
 import numpy as np
 import pandas as pd
+from scipy.stats import chi2
 from sklearn.metrics import f1_score
 
 # Umbral minimo de calidad acordado en la devolucion del foro (REQ-08)
@@ -58,17 +59,7 @@ def mcnemar_test(
 
     # Correccion de continuidad de Edwards
     statistic = float((abs(b - c) - 1.0) ** 2 / total_discordant)
-    # Aproximacion asintotica con distribucion Chi-cuadrado (1 grado de libertad)
-    # P(chi2 >= statistic) via scipy o aproximacion analitica simple
-    try:
-        from scipy.stats import chi2  # type: ignore
-
-        p_value = float(1.0 - chi2.cdf(statistic, df=1))
-    except ImportError:
-        # Fallback sin scipy usando erfc
-        from math import erfc, sqrt
-
-        p_value = float(erfc(sqrt(statistic) / sqrt(2)))
+    p_value = float(1.0 - chi2.cdf(statistic, df=1))
 
     return {"b": b, "c": c, "statistic": statistic, "p_value": p_value}
 
