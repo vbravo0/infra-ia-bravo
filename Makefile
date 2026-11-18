@@ -13,6 +13,9 @@ test-unit: ## corre las pruebas unitarias aisladas en memoria (0.2s)
 	docker compose -f docker-compose.unit.yml up --build --abort-on-container-exit --exit-code-from test-runner
 	docker compose -f docker-compose.unit.yml down -v
 
+test-eval: ## corre la suite de evaluacion de modelo y significancia estadistica (REQ-08, REQ-09)
+	docker compose -f docker-compose.unit.yml run --rm test-runner pytest model/tests/evaluation -v --disable-warnings
+
 test-integration: ## corre las pruebas de integracion reales contra Ollama y Qwen2.5
 	docker compose -f docker-compose.integration.yml up --build --attach integration-runner --abort-on-container-exit --exit-code-from integration-runner
 	docker compose -f docker-compose.integration.yml down -v
