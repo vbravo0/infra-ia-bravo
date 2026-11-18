@@ -54,13 +54,15 @@ class OllamaEvaluator:
         prompt_path: str,
         checkpoint_path: str | None = None,
         model_name: str = "qwen2.5:1.5b",
-        ollama_url: str = "http://localhost:11434/api/chat",
+        ollama_url: str | None = None,
     ):
         with open(prompt_path, encoding="utf-8") as f:
             self.prompt_text = f.read().strip()
         self.checkpoint_path = checkpoint_path
-        self.model_name = model_name
-        self.ollama_url = ollama_url
+        self.model_name = model_name or os.environ.get("OLLAMA_MODEL", "qwen2.5:1.5b")
+        self.ollama_url = ollama_url or os.environ.get(
+            "OLLAMA_URL", "http://localhost:11434/api/chat"
+        )
 
     def predict_batch(self, descriptions: Sequence[str]) -> list[str]:
         """Corre inferencia sincrona/batch llamando a la API de Ollama con checkpointing."""
