@@ -56,9 +56,11 @@ data/CVE_CWE_2025.csv
 *.zip
 *.tar.gz
 
-# Model artifacts locales (se generan en build time)
+# Model artifacts locales (se generan en build time o viven en Cloud Storage)
 *.joblib
 model/model.joblib
+models/
+models/*
 
 # OS generated
 .DS_Store
