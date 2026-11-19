@@ -1,6 +1,6 @@
 # Matriz de Requerimientos y Cobertura de Tests
 
-Mapeo directo entre los compromisos tecnicos respondidos en la devolucion del foro (`respuesta-foro.md`) y su estado real de implementacion y pruebas en `test-llm-cve`.
+Mapeo directo entre los compromisos tecnicos respondidos en la devolucion del foro (`respuesta-foro.md`) y su estado real de implementacion y pruebas en `infra-ia-bravo`.
 
 **Escala de testeabilidad:**
 - **Alta:** Test unitario o de contrato directo en `pytest` (rapido, en memoria).

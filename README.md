@@ -16,10 +16,10 @@ PoC de arquitectura cloud-native para clasificacion de severidad de vulnerabilid
 
 ## Componentes del Repositorio
 
-- [`model/`](file:///media/vub/25f61be1-310a-49c4-bce7-a8bc793230e32/vub/postgrados/unlu/test-llm-cve/model/README.md): Servidor FastAPI con arquitectura hexagonal (`domain` / `adapters`), traits desacoplados y suite de pruebas pytest.
-- [`db/`](file:///media/vub/25f61be1-310a-49c4-bce7-a8bc793230e32/vub/postgrados/unlu/test-llm-cve/db/schema.sql): Esquema DDL unico (`schema.sql`) para tablas `history` y `feedback_events` (append-only).
-- [`helm/`](file:///media/vub/25f61be1-310a-49c4-bce7-a8bc793230e32/vub/postgrados/unlu/test-llm-cve/helm/README.md): Charts de Helm para orquestacion en Kubernetes, ConfigMaps de prompt y HPA.
-- [`terraform/`](file:///media/vub/25f61be1-310a-49c4-bce7-a8bc793230e32/vub/postgrados/unlu/test-llm-cve/terraform/README.md): Aprovisionamiento de infraestructura en GCP (GKE, Artifact Registry, Cloud SQL).
+- [`model/`](file:///media/vub/25f61be1-310a-49c4-bce7-a8bc793230e32/vub/postgrados/unlu/infra-ia-bravo/model/README.md): Servidor FastAPI con arquitectura hexagonal (`domain` / `adapters`), traits desacoplados y suite de pruebas pytest.
+- [`db/`](file:///media/vub/25f61be1-310a-49c4-bce7-a8bc793230e32/vub/postgrados/unlu/infra-ia-bravo/db/schema.sql): Esquema DDL unico (`schema.sql`) para tablas `history` y `feedback_events` (append-only).
+- [`helm/`](file:///media/vub/25f61be1-310a-49c4-bce7-a8bc793230e32/vub/postgrados/unlu/infra-ia-bravo/helm/README.md): Charts de Helm para orquestacion en Kubernetes, ConfigMaps de prompt y HPA.
+- [`terraform/`](file:///media/vub/25f61be1-310a-49c4-bce7-a8bc793230e32/vub/postgrados/unlu/infra-ia-bravo/terraform/README.md): Aprovisionamiento de infraestructura en GCP (GKE, Artifact Registry, Cloud SQL).
 
 ---
 
