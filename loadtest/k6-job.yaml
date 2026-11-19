@@ -13,10 +13,8 @@ spec:
           image: grafana/k6:latest
           args: ["run", "/scripts/k6-script.js"]
           env:
-            - name: SLEEP
-              value: "0.02"
-            - name: PEAK_VUS
-              value: "40"
+            - name: ENGINE
+              value: "tfidf" # "tfidf" o "llm"
             - name: MODEL_URL
               value: http://model:8081
           volumeMounts:

@@ -4,7 +4,7 @@ K3D_CLUSTER ?= infra-cloud
 OLLAMA_DIR  ?= /home/vub/.ollama
 
 .DEFAULT_GOAL := help
-.PHONY: help train predict-tfidf predict-llm eval-tfidf eval-llm compare test test-unit test-eval test-integration build-model k3d-up k3d-images deploy rollback status clean
+.PHONY: help train predict-tfidf predict-llm eval-tfidf eval-llm compare test test-unit test-eval test-integration build-model k3d-up k3d-images deploy rollback status clean loadtest-tfidf loadtest-llm
 
 help: ## lista los comandos
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-18s %s\n", $$1, $$2}'
@@ -72,3 +72,19 @@ rollback: ## vuelve a la version anterior en 5 segundos
 status: ## muestra pods, hpa e historial
 	kubectl get pods,svc,hpa
 	helm history model
+
+loadtest-tfidf: ## ejecuta prueba de estres con k6 para TF-IDF en el cluster (hace escalar el HPA)
+	kubectl create configmap k6-script --from-file=loadtest/k6-script.js --dry-run=client -o yaml | kubectl apply -f -
+	kubectl delete job k6 --ignore-not-found
+	sed 's/value: "llm"/value: "tfidf"/' loadtest/k6-job.yaml | kubectl apply -f -
+	@echo "Esperando que inicie el Job k6..."
+	@sleep 3
+	kubectl logs -f job/k6
+
+loadtest-llm: ## ejecuta prueba de latencia con k6 para LLM (Qwen2.5) en el cluster
+	kubectl create configmap k6-script --from-file=loadtest/k6-script.js --dry-run=client -o yaml | kubectl apply -f -
+	kubectl delete job k6 --ignore-not-found
+	sed 's/value: "tfidf"/value: "llm"/' loadtest/k6-job.yaml | kubectl apply -f -
+	@echo "Esperando que inicie el Job k6..."
+	@sleep 3
+	kubectl logs -f job/k6
