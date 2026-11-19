@@ -9,7 +9,7 @@ def _download_from_gcs_if_configured() -> None:
     if not GCS_BUCKET or MODEL_PATH.exists():
         return
 
-    from google.cloud import storage
+    from google.cloud import storage # type: ignore
 
     blob_path = MODEL_BLOB_PATH or "model.joblib"
     print(f"Descargando modelo desde gs://{GCS_BUCKET}/{blob_path} a {MODEL_PATH}...")

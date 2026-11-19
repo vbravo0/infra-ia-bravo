@@ -34,6 +34,10 @@ spec:
               value: "qwen2.5:1.5b"
             - name: DATABASE_URL
               value: "postgresql://cve_user:cve_pass@postgres:5432/cve_db"
+            - name: GCS_BUCKET
+              value: {{ .Values.gcs.bucket | default "unlu-ia-bravo-models" | quote }}
+            - name: MODEL_BLOB_PATH
+              value: {{ .Values.gcs.modelBlobPath | default "v20261119_181549/model.joblib" | quote }}
           readinessProbe:
             httpGet:
               path: /healthz

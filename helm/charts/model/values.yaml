@@ -27,3 +27,7 @@ autoscaling:
   minReplicas: 2
   maxReplicas: 8
   targetCPUUtilizationPercentage: 60
+
+gcs:
+  bucket: "unlu-ia-bravo-models"
+  modelBlobPath: "v20261119_181549/model.joblib"

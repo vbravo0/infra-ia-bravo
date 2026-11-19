@@ -5,6 +5,10 @@ image:
   tag: local
   pullPolicy: Never # ErrImageNeverPull = you forgot `make k3d-images`
 
+gcs:
+  bucket: ""
+  modelBlobPath: ""
+
 # Ollama adentro del cluster k3s
 ollama:
   image:
