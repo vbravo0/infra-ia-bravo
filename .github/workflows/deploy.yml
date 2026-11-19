@@ -31,6 +31,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/model:${{ github.workspace }}
           MODEL_PATH: ${{ github.workspace }}/model.joblib
           PROMPT_PATH: ${{ github.workspace }}/model/prompts/system_prompt.txt
+          MODEL_VERSION: test-sha
         run: |
           pytest model/tests/unit -v --disable-warnings
 
