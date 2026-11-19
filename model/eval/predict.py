@@ -50,12 +50,6 @@ def main() -> None:
 
     print(f"Cargando dataset desde {args.data}...")
     df = pd.read_csv(args.data)
-    if "DESCRIPTION" not in df.columns:
-        print(
-            "❌ Error: El dataset debe tener una columna 'DESCRIPTION'.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
 
     evaluator: EvaluatableModel
     if args.model == "tfidf":
@@ -71,7 +65,7 @@ def main() -> None:
 
     out_df = pd.DataFrame(
         {
-            "CVE-ID": df["CVE-ID"] if "CVE-ID" in df.columns else range(len(df)),
+            "CVE-ID": df["CVE-ID"],
             "PREDICTION": predictions,
         }
     )

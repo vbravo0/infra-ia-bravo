@@ -24,13 +24,9 @@ from eval.metrics import (
 
 
 def load_series(csv_path: str, column_name: str) -> list[str]:
-    """Lee una columna especifica de un CSV eliminando registros nulos."""
+    """Lee una columna especifica de un CSV."""
     df = pd.read_csv(csv_path)
-    if column_name in df.columns:
-        col = df[column_name]
-    else:
-        col = df.iloc[:, -1]
-    return col.dropna().astype(str).tolist()
+    return df[column_name].dropna().astype(str).tolist()
 
 
 def compare_mcnemar(

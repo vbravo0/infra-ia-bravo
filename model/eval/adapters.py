@@ -53,9 +53,6 @@ class OllamaEvaluator:
             return []
 
         df_ckpt = pd.read_csv(self.checkpoint_path)
-        if "PREDICTION" not in df_ckpt.columns:
-            return []
-
         predictions = df_ckpt["PREDICTION"].dropna().tolist()
         print(
             f"Retomando desde checkpoint: {len(predictions)}/{total_expected} casos listos."
