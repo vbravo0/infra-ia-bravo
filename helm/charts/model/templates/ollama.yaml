@@ -33,7 +33,7 @@ spec:
         - name: ollama-models
           hostPath:
             path: /var/lib/ollama-models
-            type: Directory
+            type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
