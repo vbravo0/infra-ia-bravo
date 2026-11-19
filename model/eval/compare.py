@@ -24,7 +24,12 @@ from eval.metrics import (
 
 
 def load_series(csv_path: str, column_name: str) -> list[str]:
-    """Lee una columna especifica de un CSV."""
+    """Lee una columna especifica de un CSV.
+
+    Precondicion:
+        - El archivo en `csv_path` existe y es un CSV valido.
+        - Debe contener la columna indicada en `column_name`.
+    """
     df = pd.read_csv(csv_path)
     return df[column_name].dropna().astype(str).tolist()
 
