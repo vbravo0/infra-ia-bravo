@@ -40,11 +40,17 @@ def compare_mcnemar(
     )
     print(f"  Chi2 (Edwards): {res['statistic']:.4f}")
     print(f"  p-value:        {res['p_value']:.6f}")
-    conclusion = (
-        "Significativa (p < 0.05)"
-        if res["p_value"] < 0.05
-        else "No significativa (p >= 0.05)"
-    )
+
+    if res["p_value"] < 0.05:
+        ganador = (
+            "Modelo B es significativamente MEJOR"
+            if res["c"] > res["b"]
+            else "Modelo B es significativamente PEOR"
+        )
+        conclusion = f"Diferencia significativa (p < 0.05) -> {ganador}"
+    else:
+        conclusion = "Sin diferencia estadistica significativa (p >= 0.05)"
+
     print(f"  Conclusion:     {conclusion}")
     return res
 
@@ -58,6 +64,17 @@ def compare_bootstrap(
     print(f"  Delta promedio (B - A): {res['mean_delta']:+.4f}")
     print(f"  IC 95%:                [{res['ci_lower']:+.4f}, {res['ci_upper']:+.4f}]")
     print(f"  p-value empirico:       {res['p_value']:.6f}")
+
+    if res["ci_lower"] > 0:
+        conclusion = (
+            "Modelo B MEJORA significativamente a Modelo A en Macro F1 (IC 95% > 0)"
+        )
+    elif res["ci_upper"] < 0:
+        conclusion = "Modelo B EMPEORA significativamente respecto a Modelo A en Macro F1 (IC 95% < 0)"
+    else:
+        conclusion = "No hay evidencia de mejora ni empeoramiento significativo (IC 95% incluye el 0)"
+
+    print(f"  Conclusion:     {conclusion}")
     return res
 
 
