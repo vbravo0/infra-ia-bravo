@@ -1,10 +1,14 @@
-name: CI/CD Pipeline - Eval & Deploy
+name: CI/CD Pipeline - Eval & Publish
 
 on:
   push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   evaluate-and-deploy:
@@ -46,12 +50,26 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/model:${{ github.workspace }}
         run: |
-          # Si este script da error (exit 1), el pipeline SE FRENA ACA
           python model/eval/predict.py --model tfidf --data data/sample_1000.csv --output data/predictions_tfidf.csv
           python model/eval/evaluate.py --pred data/predictions_tfidf.csv
 
-      - name: 8. Construir Imagen Docker (Solo si pasaron los tests y el Quality Gate)
+      - name: 8. Autenticarse contra Google Cloud via OIDC
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: 9. Configurar autenticacion Docker para Artifact Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: 10. Construir y Publicar Imagen Docker inmutable (:git-sha)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           TAG=$(git rev-parse --short HEAD)
-          echo "Construyendo imagen con tag: $TAG"
-          docker build --build-arg MODEL_VERSION=$TAG -f model/Dockerfile -t gcr.io/mi-proyecto/cve-model:$TAG .
+          IMAGE_URI="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.AR_REPOSITORY }}/model:${TAG}"
+          echo "Construyendo y publicando imagen inmutable: ${IMAGE_URI}"
+          docker build --build-arg MODEL_VERSION=${TAG} -f model/Dockerfile -t ${IMAGE_URI} .
+          docker push ${IMAGE_URI}
