@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: model/Dockerfile.test
     environment:
-      MODEL_VERSION: test-sha
+      MODEL_VERSION: ${MODEL_VERSION:-unknown}
     volumes:
       - ./data:/app/data
       - ./models:/app/models

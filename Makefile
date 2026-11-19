@@ -2,6 +2,7 @@
 TAG         ?= local
 K3D_CLUSTER ?= infra-cloud
 OLLAMA_DIR  ?= /home/vub/.ollama
+GIT_SHA     ?= $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 
 .DEFAULT_GOAL := help
 .PHONY: help train predict-tfidf predict-llm eval-tfidf eval-llm compare test test-unit test-eval test-integration build-model k3d-up k3d-images deploy rollback status clean loadtest-tfidf loadtest-llm
@@ -9,8 +10,8 @@ OLLAMA_DIR  ?= /home/vub/.ollama
 help: ## lista los comandos
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-18s %s\n", $$1, $$2}'
 
-train: ## entrena el modelo TF-IDF en Docker -> model.joblib
-	docker compose -f docker-compose.unit.yml run --rm test-runner python train.py
+train: ## entrena el modelo TF-IDF en Docker inyectando el Git SHA real -> models/vYYYYMMDD_HHMMSS/
+	MODEL_VERSION=$(GIT_SHA) docker compose -f docker-compose.unit.yml run --rm -e MODEL_VERSION=$(GIT_SHA) test-runner python train.py
 
 predict-tfidf: ## genera las predicciones batch del modelo TF-IDF en Docker -> data/predictions_tfidf.csv
 	docker compose -f docker-compose.unit.yml run --rm test-runner python -m eval.predict --model tfidf --data data/sample_1000.csv --output data/predictions_tfidf.csv
