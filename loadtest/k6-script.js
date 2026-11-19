@@ -12,7 +12,7 @@ const ENGINE = __ENV.ENGINE || "tfidf"; // "tfidf" o "llm"
 const MODEL_URL = __ENV.MODEL_URL || "http://model:8081";
 
 // MISMA PRUEBA PARA AMBOS:
-// Escenario controlado de concurrencia fija para comparar manzanas con manzanas:
+// Escenario controlado de concurrencia fija para evaluacion comparativa:
 // 10 VUs constantes durante 1 minuto con pausas de 1 segundo entre iteraciones.
 export const options = {
   scenarios: {
