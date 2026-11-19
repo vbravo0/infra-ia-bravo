@@ -63,3 +63,9 @@ model/model.joblib
 # OS generated
 .DS_Store
 Thumbs.db
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
