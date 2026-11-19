@@ -19,8 +19,8 @@ resource "google_container_cluster" "primary" {
   network    = google_compute_network.vpc.name
   subnetwork = google_compute_subnetwork.subnet.name
 
-  initial_node_count       = 1
-  deletion_protection      = false
+  initial_node_count  = 1
+  deletion_protection = false
 
   # Habilita metricas para HPA
   addons_config {
@@ -31,9 +31,9 @@ resource "google_container_cluster" "primary" {
 }
 
 resource "google_container_node_pool" "primary_nodes" {
-  name       = "${var.cluster_name}-node-pool"
-  location   = var.region
-  cluster    = google_container_cluster.primary.name
+  name     = "${var.cluster_name}-node-pool"
+  location = var.region
+  cluster  = google_container_cluster.primary.name
 
   autoscaling {
     min_node_count = 1
