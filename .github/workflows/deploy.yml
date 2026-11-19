@@ -1,75 +1,56 @@
-name: CI/CD Pipeline - Eval & Publish
+# Class 8 (Caso integrador): Terraform + Helm para GKE en GCP
+# Disparo manual con workflow_dispatch indicando el image_tag publicado por ci.yml
+name: deploy
 
 on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag publicado por ci.yml: el commit sha completo (nunca latest)"
+        required: true
+        type: string
 
 permissions:
   contents: read
   id-token: write
 
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+  AR_REPO: ${{ vars.AR_REPOSITORY || 'infra-cloud-template' }}
+  IMAGE_TAG: ${{ inputs.image_tag }}
+
 jobs:
-  evaluate-and-deploy:
+  helm-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Clonar repositorio
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: 2. Configurar Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: 3. Instalar dependencias
+      - name: Verificar tag de imagen
         run: |
-          pip install -r model/requirements.txt pytest pytest-asyncio
+          case "$IMAGE_TAG" in
+            latest|"") echo "::error::image_tag no puede ser latest ni vacio"; exit 1 ;;
+          esac
 
-      - name: 4. Entrenar / Preparar artefacto (Build Time)
-        run: |
-          python model/train.py
-
-      - name: 5. Tests Unitarios (Software / API)
-        env:
-          PYTHONPATH: ${{ github.workspace }}/model:${{ github.workspace }}
-          MODEL_PATH: ${{ github.workspace }}/model.joblib
-          PROMPT_PATH: ${{ github.workspace }}/model/prompts/system_prompt.txt
-          MODEL_VERSION: test-sha
-        run: |
-          pytest model/tests/unit -v --disable-warnings
-
-      - name: 6. Tests de Evaluacion (Contratos de Metricas y Estadistica)
-        env:
-          PYTHONPATH: ${{ github.workspace }}/model:${{ github.workspace }}
-          MODEL_PATH: ${{ github.workspace }}/model.joblib
-        run: |
-          pytest model/tests/evaluation -v --disable-warnings
-
-      - name: 7. Quality Gate (Eval TF-IDF Automatizada que frena el deploy)
-        env:
-          PYTHONPATH: ${{ github.workspace }}/model:${{ github.workspace }}
-        run: |
-          python model/eval/predict.py --model tfidf --data data/sample_1000.csv --output data/predictions_tfidf.csv
-          python model/eval/evaluate.py --pred data/predictions_tfidf.csv
-
-      - name: 8. Autenticarse contra Google Cloud via OIDC
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - id: auth
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
 
-      - name: 9. Configurar autenticacion Docker para Artifact Registry
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+      - uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: cve-cluster
+          location: ${{ env.REGION }}
+          project_id: ${{ env.PROJECT_ID }}
 
-      - name: 10. Construir y Publicar Imagen Docker inmutable (:git-sha)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - uses: azure/setup-helm@v4
+
+      - name: Desplegar en GKE via Helm
         run: |
-          TAG=$(git rev-parse --short HEAD)
-          IMAGE_URI="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.AR_REPOSITORY }}/model:${TAG}"
-          echo "Construyendo y publicando imagen inmutable: ${IMAGE_URI}"
-          docker build --build-arg MODEL_VERSION=${TAG} -f model/Dockerfile -t ${IMAGE_URI} .
-          docker push ${IMAGE_URI}
+          IMAGE_URI="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/model"
+          helm upgrade --install model helm/charts/model \
+            --set image.repository="${IMAGE_URI}" \
+            --set image.tag="${IMAGE_TAG}" \
+            --wait --timeout 5m
+          kubectl get pods,svc,hpa

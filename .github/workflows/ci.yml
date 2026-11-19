@@ -1,0 +1,75 @@
+name: CI/CD Pipeline - Eval & Publish
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  evaluate-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: 2. Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 3. Instalar dependencias
+        run: |
+          pip install -r model/requirements.txt pytest pytest-asyncio
+
+      - name: 4. Entrenar / Preparar artefacto (Build Time)
+        run: |
+          python model/train.py
+
+      - name: 5. Tests Unitarios (Software / API)
+        env:
+          PYTHONPATH: ${{ github.workspace }}/model:${{ github.workspace }}
+          MODEL_PATH: ${{ github.workspace }}/model.joblib
+          PROMPT_PATH: ${{ github.workspace }}/model/prompts/system_prompt.txt
+          MODEL_VERSION: test-sha
+        run: |
+          pytest model/tests/unit -v --disable-warnings
+
+      - name: 6. Tests de Evaluacion (Contratos de Metricas y Estadistica)
+        env:
+          PYTHONPATH: ${{ github.workspace }}/model:${{ github.workspace }}
+          MODEL_PATH: ${{ github.workspace }}/model.joblib
+        run: |
+          pytest model/tests/evaluation -v --disable-warnings
+
+      - name: 7. Quality Gate (Eval TF-IDF Automatizada que frena el deploy)
+        env:
+          PYTHONPATH: ${{ github.workspace }}/model:${{ github.workspace }}
+        run: |
+          python model/eval/predict.py --model tfidf --data data/sample_1000.csv --output data/predictions_tfidf.csv
+          python model/eval/evaluate.py --pred data/predictions_tfidf.csv
+
+      - name: 8. Autenticarse contra Google Cloud via OIDC
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: 9. Configurar autenticacion Docker para Artifact Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: 10. Construir y Publicar Imagen Docker inmutable (:git-sha)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          TAG=$(git rev-parse --short HEAD)
+          IMAGE_URI="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.AR_REPOSITORY }}/model:${TAG}"
+          echo "Construyendo y publicando imagen inmutable: ${IMAGE_URI}"
+          docker build --build-arg MODEL_VERSION=${TAG} -f model/Dockerfile -t ${IMAGE_URI} .
+          docker push ${IMAGE_URI}
