@@ -7,4 +7,4 @@ services:
       MODEL_VERSION: test-sha
     volumes:
       - ./data:/app/data
-    command: ["pytest", "model/tests/unit", "-v", "--disable-warnings"]
+    command: ["pytest", "model/tests/unit", "model/tests/evaluation", "-v", "--disable-warnings"]

@@ -27,7 +27,7 @@ eval-llm: ## corre la evaluacion del LLM calculando F1 sobre sus predicciones en
 compare: ## compara dos modelos con McNemar y Bootstrap pareado en Docker (ej: make compare PREDA=... PREDB=...)
 	docker compose -f docker-compose.unit.yml run --rm test-runner python eval/compare.py --pred-a $(PREDA) --pred-b $(PREDB)
 
-test-unit: ## corre las pruebas unitarias aisladas en memoria (0.2s)
+test-unit: ## corre las pruebas unitarias y de evaluacion estadistica en Docker
 	docker compose -f docker-compose.unit.yml up --build --abort-on-container-exit --exit-code-from test-runner
 	docker compose -f docker-compose.unit.yml down -v
 
@@ -38,7 +38,9 @@ test-integration: ## corre las pruebas de integracion reales contra Ollama y Qwe
 	docker compose -f docker-compose.integration.yml up --build --attach integration-runner --abort-on-container-exit --exit-code-from integration-runner
 	docker compose -f docker-compose.integration.yml down -v
 
-test: test-unit test-eval test-integration ## corre todas las suites (unitarias + evaluacion + integracion)
+test: ## corre toda la suite automatizada (unitarios + evaluacion estadistica)
+	docker compose -f docker-compose.unit.yml up --build --abort-on-container-exit --exit-code-from test-runner
+	docker compose -f docker-compose.unit.yml down -v
 
 build-model: ## construye la imagen model:$(TAG)
 	docker build --build-arg MODEL_VERSION=$(TAG) -f model/Dockerfile -t model:$(TAG) .
