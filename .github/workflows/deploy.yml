@@ -38,6 +38,7 @@ jobs:
       - name: 6. Tests de Evaluacion (Contratos de Metricas y Estadistica)
         env:
           PYTHONPATH: ${{ github.workspace }}/model:${{ github.workspace }}
+          MODEL_PATH: ${{ github.workspace }}/model.joblib
         run: |
           pytest model/tests/evaluation -v --disable-warnings
 
