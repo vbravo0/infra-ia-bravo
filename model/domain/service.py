@@ -44,13 +44,14 @@ async def classify_cve(
         raise ValueError(f"Motor no configurado: {req.engine}")
 
     start = time.perf_counter()
-    _, prompt_hash = load_prompt()
+    _, prompt_hash_val = load_prompt()
+    prompt_hash = prompt_hash_val if req.engine == "llm" else None
 
     predictor = predictors[req.engine]
     severity, conf, parse_error, raw_llm = await predictor.predict(req.description)
 
     if parse_error:
-        INVALID_OUTPUT.labels(version=MODEL_VERSION, prompt_hash=prompt_hash).inc()
+        INVALID_OUTPUT.labels(version=MODEL_VERSION, prompt_hash=prompt_hash_val).inc()
 
     if conf is not None and conf < 0.50:
         LOW_CONFIDENCE.labels(engine=req.engine, version=MODEL_VERSION).inc()
@@ -72,7 +73,7 @@ async def classify_cve(
         engine=req.engine,
         severity=severity,
         version=MODEL_VERSION,
-        prompt_hash=prompt_hash,
+        prompt_hash=prompt_hash_val,
     ).inc()
     PREDICT_LATENCY.labels(engine=req.engine).observe(elapsed)
     repo.save_prediction(res, req.description)

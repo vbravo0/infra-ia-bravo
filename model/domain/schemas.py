@@ -15,7 +15,7 @@ class PredictResult(BaseModel):
     model_hash: str
     confidence: Optional[float] = None
     model_version: str
-    prompt_hash: str
+    prompt_hash: Optional[str] = None
     latency_ms: float
     parse_error: bool = False
     raw_llm: str = ""
