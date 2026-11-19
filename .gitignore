@@ -56,6 +56,9 @@ data/CVE_CWE_2025.csv
 *.zip
 *.tar.gz
 
+# Salidas de evaluacion y predicciones generadas dinamicamente
+data/predictions_*.csv
+
 # Model artifacts locales (se generan en build time o viven en Cloud Storage)
 *.joblib
 model/model.joblib
